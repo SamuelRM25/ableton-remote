@@ -39,13 +39,19 @@ export function SetlistBuilder({
   const sameSong = (e: { name: string; pos: number }, s: SongItem) => e.name === s.name && Math.abs(e.pos - s.pos) < 0.01;
   /** 1-based positions of a song inside the setlist (empty = not in it). */
   const positionsOf = (s: SongItem) => entries.flatMap((e, i) => (sameSong(e, s) ? [i + 1] : []));
-  const [onlyMissing, setOnlyMissing] = useState(false);
+  /** Song filter: everything, not in THIS setlist, or not in ANY setlist. */
+  const [filter, setFilter] = useState<"all" | "missing" | "free">("all");
+  /** Other setlists (not the one being edited) that already have this song. */
+  const otherListsWith = (s: SongItem) =>
+    config.setlists.filter((l) => l.id !== activeSetlist?.id && l.entries.some((e) => sameSong(e, s)));
   const [flashKey, setFlashKey] = useState<string | null>(null);
 
   function ensureList() {
     return activeSetlist ?? st.createSetlist(`Setlist ${config.setlists.length + 1}`);
   }
   function add(s: SongItem) {
+    const others = otherListsWith(s);
+    if (others.length > 0) toast(`«${s.name}» también está en ${others.map((l) => `«${l.name}»`).join(", ")}`);
     setFlashKey(s.key);
     window.setTimeout(() => setFlashKey((k) => (k === s.key ? null : k)), 900);
     const l = ensureList();
@@ -272,10 +278,19 @@ export function SetlistBuilder({
                 size="sm"
                 variant="dot"
                 color="cue"
-                active={onlyMissing}
+                active={filter === "missing"}
                 label="Faltan"
-                title="Mostrar solo las que todavía no están en el setlist"
-                onClick={() => setOnlyMissing((v) => !v)}
+                title="Solo las que no están en este setlist"
+                onClick={() => setFilter((f) => (f === "missing" ? "all" : "missing"))}
+              />
+              <LedKey
+                size="sm"
+                variant="dot"
+                color="link"
+                active={filter === "free"}
+                label="Sin usar"
+                title="Solo las que no están en ningún setlist"
+                onClick={() => setFilter((f) => (f === "free" ? "all" : "free"))}
               />
               <LedKey
                 size="sm"
@@ -301,7 +316,16 @@ export function SetlistBuilder({
               <p style={{ margin: 0, fontSize: 14, color: "var(--color-text-2)" }}>No hay clips en esa pista.</p>
             ) : (
               <ul className="flex flex-col gap-1.5" style={{ margin: 0, padding: 0, listStyle: "none" }}>
-                {allSongs.filter((s) => !onlyMissing || positionsOf(s).length === 0).map((s) => {
+                {allSongs
+                  .filter((s) =>
+                    filter === "missing"
+                      ? positionsOf(s).length === 0
+                      : filter === "free"
+                        ? positionsOf(s).length === 0 && otherListsWith(s).length === 0
+                        : true,
+                  )
+                  .map((s) => {
+                  const others = otherListsWith(s);
                   const d = st.durationSec(s);
                   const pos = positionsOf(s);
                   const added = pos.length > 0;
@@ -348,6 +372,33 @@ export function SetlistBuilder({
                             ? `${Math.round((st.songBeats(s)! * st.clock.beatUnit) / 4 / st.clock.beatsPerBar)} compases`
                             : "Session: sin largo"}
                         </span>
+                        {/* Which OTHER setlists already use this song */}
+                        {others.length > 0 && (
+                          <span className="flex flex-wrap gap-1" style={{ marginTop: 4 }}>
+                            {others.map((l) => (
+                              <button
+                                key={l.id}
+                                onClick={() => setConfig({ ...config, activeSetlist: l.id })}
+                                title={`Abrir «${l.name}»`}
+                                style={{
+                                  fontSize: 11,
+                                  fontWeight: 600,
+                                  padding: "2px 8px",
+                                  borderRadius: 999,
+                                  color: "var(--color-accent-link)",
+                                  background: "rgba(95,212,244,0.1)",
+                                  boxShadow: "inset 0 0 0 1px rgba(95,212,244,0.45)",
+                                  maxWidth: 180,
+                                  overflow: "hidden",
+                                  textOverflow: "ellipsis",
+                                  whiteSpace: "nowrap",
+                                }}
+                              >
+                                En «{l.name}» #{l.entries.findIndex((e) => sameSong(e, s)) + 1}
+                              </button>
+                            ))}
+                          </span>
+                        )}
                       </span>
                       <input
                         type="number"

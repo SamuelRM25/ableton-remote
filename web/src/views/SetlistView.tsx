@@ -171,6 +171,17 @@ export function SetlistView() {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [activeSongId, setActiveSongId] = useState<string | null>(null);
   const [loopSongId, setLoopSongId] = useState<string | null>(null);
+  // Marca desde la que corre "Loop hasta la siguiente marca" (si hay).
+  const [loopCueId, setLoopCueId] = useState<string | null>(null);
+  // Si alguien apaga el loop desde Live o desde la barra de transporte,
+  // los indicadores del setlist se apagan también.
+  const liveLoop = useLiveProp<boolean>(client, (c) => c.song, "loop");
+  useEffect(() => {
+    if (liveLoop === false) {
+      setLoopSongId(null);
+      setLoopCueId(null);
+    }
+  }, [liveLoop]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
   const [editingSongId, setEditingSongId] = useState<string | null>(null);
@@ -769,7 +780,42 @@ export function SetlistView() {
     try {
       await loopRange(client, start, end);
       setLoopSongId(songId);
+      setLoopCueId(null);
       toast(`Loop: ${song.name}`);
+    } catch {
+      toast("No se pudo activar el loop");
+    }
+  }
+
+  /**
+   * Igual que "Loop hasta el siguiente localizador" del menú de Live:
+   * pone el loop del arreglo desde esta marca hasta la siguiente y lo
+   * activa. Tocar otra vez en la misma marca quita el loop.
+   */
+  async function toggleLoopToNext(item: SetlistItem) {
+    if (!client) return;
+    if (loopCueId === item.id) {
+      try {
+        await client.song.set("loop", false);
+      } catch {
+        toast("No se pudo quitar el loop");
+      }
+      setLoopCueId(null);
+      return;
+    }
+    const next = state.items
+      .filter((i) => i.time > item.time + 0.001)
+      .sort((a, b) => a.time - b.time)[0];
+    if (!next) {
+      // Live tampoco ofrece la opción en la última marca.
+      toast("Es la última marca: no hay una siguiente hasta donde hacer loop");
+      return;
+    }
+    try {
+      await loopRange(client, item.time, next.time);
+      setLoopCueId(item.id);
+      setLoopSongId(null);
+      toast(`Loop: ${item.name} → ${next.name}`);
     } catch {
       toast("No se pudo activar el loop");
     }
@@ -834,6 +880,8 @@ export function SetlistView() {
     onJump: () => void handleJump(item),
     onPlayFrom: () => void handlePlayFrom(item),
     onCountIn: () => void handleCountInPlay(item),
+    isLooping: loopCueId === item.id,
+    onLoopToNext: () => void toggleLoopToNext(item),
     onStartRename: () => {
       setEditingId(item.id);
       setEditValue(item.name);
@@ -1430,6 +1478,8 @@ function CueRow({
   onJump,
   onPlayFrom,
   onCountIn,
+  isLooping,
+  onLoopToNext,
   onStartRename,
   onSaveRename,
   onCancelRename,
@@ -1447,6 +1497,8 @@ function CueRow({
   onJump: () => void;
   onPlayFrom: () => void;
   onCountIn: () => void;
+  isLooping: boolean;
+  onLoopToNext: () => void;
   onStartRename: () => void;
   onSaveRename: () => void;
   onCancelRename: () => void;
@@ -1561,6 +1613,14 @@ function CueRow({
             <IconMetronome size={15} />
           </IconBtn>
           <IconBtn
+            onClick={onLoopToNext}
+            color={isLooping ? "var(--color-accent-cue)" : "var(--color-text-2)"}
+            active={isLooping}
+            label={isLooping ? "Quitar loop" : "Loop hasta la siguiente marca"}
+          >
+            <IconLoop size={15} />
+          </IconBtn>
+          <IconBtn
             onClick={onDelete}
             color={deleteArmed ? "var(--color-text-inverse)" : "var(--color-critical)"}
             label={deleteArmed ? "Toca de nuevo: se pausará y borrará" : "Borrar marca (también en Live)"}
@@ -1634,19 +1694,29 @@ function IconBtn({
   children,
   color,
   label,
+  active,
 }: {
   onClick: () => void;
   children: React.ReactNode;
   color: string;
   label?: string;
+  /** Lit LED ring (e.g. a running loop). */
+  active?: boolean;
 }) {
   return (
     <button
       onClick={onClick}
       title={label}
       aria-label={label}
+      aria-pressed={active}
       className="tactile shrink-0"
       style={{
+        ...(active
+          ? {
+              boxShadow: `inset 0 0 0 1.5px ${color}, 0 0 12px color-mix(in srgb, ${color} 40%, transparent)`,
+              filter: `drop-shadow(0 0 3px ${color})`,
+            }
+          : {}),
         width: 32,
         height: 32,
         display: "flex",

@@ -47,7 +47,7 @@ export function Toasts() {
             fontSize: 13,
             fontWeight: 600,
             color: "var(--color-text-1)",
-            borderColor: "var(--color-critical)",
+            borderColor: "var(--color-border-strong)",
             maxWidth: "min(480px, 90vw)",
             textAlign: "center",
           }}

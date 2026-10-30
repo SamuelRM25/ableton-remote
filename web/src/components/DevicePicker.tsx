@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { Ableton } from "ableton-js";
 import { useLiveRawList } from "../lib/list-hooks";
 import { toast } from "../lib/toast";
+import { LedKey } from "./hw";
 
 interface Chip {
   id: string;
@@ -204,97 +205,50 @@ export function DevicePicker({ client }: { client: Ableton }) {
     <div
       className="shrink-0 flex flex-col gap-2 px-3 sm:px-5 py-2.5"
       style={{
-        background: "var(--color-surface-1)",
-        borderBottom: "1px solid var(--color-border)",
+        background: "linear-gradient(180deg, #1d1f23, #18191d)",
+        borderBottom: "1px solid rgba(0,0,0,0.75)",
       }}
     >
-      <div className="flex items-center gap-2 overflow-x-auto scroll-touch" style={{ touchAction: "pan-x" }}>
-        <span className="label-cap shrink-0">Track</span>
-        {chips.map((c) => {
-          const active = c.id === activeTrackId;
-          const accent =
-            c.kind === "main"
-              ? "var(--color-accent-play)"
-              : c.kind === "return"
-                ? "var(--color-accent-macro)"
-                : "var(--color-accent-macro)";
-          return (
-            <button
-              key={`${c.kind}-${c.id}`}
-              onClick={() => setTrackId(c.id)}
-              className="tactile shrink-0"
-              style={{
-                height: 32,
-                padding: "0 12px",
-                fontSize: 12,
-                fontWeight: 600,
-                color:
-                  c.kind === "main" && !active
-                    ? "var(--color-accent-play)"
-                    : active
-                      ? "var(--color-text-inverse)"
-                      : "var(--color-text-1)",
-                background: active ? accent : "var(--color-surface-2)",
-                border: "1px solid var(--color-border)",
-                borderRadius: 8,
-                maxWidth: 140,
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
-              }}
-            >
-              {c.label}
-            </button>
-          );
-        })}
+      <div className="flex items-center gap-1.5 overflow-x-auto scroll-touch" style={{ touchAction: "pan-x", paddingBottom: 2 }}>
+        <span className="label-cap shrink-0" style={{ width: 52 }}>Track</span>
+        {chips.map((c) => (
+          <LedKey
+            key={`${c.kind}-${c.id}`}
+            size="sm"
+            variant="ring"
+            color={c.kind === "main" ? "play" : c.kind === "return" ? "macro" : "cue"}
+            active={c.id === activeTrackId}
+            onClick={() => setTrackId(c.id)}
+            label={c.label}
+            style={{ maxWidth: 160, textTransform: "none", letterSpacing: "0.02em", fontSize: 13 }}
+          />
+        ))}
       </div>
       {devices.length > 0 && (
-        <div className="flex items-center gap-2 overflow-x-auto scroll-touch" style={{ touchAction: "pan-x" }}>
-          <span className="label-cap shrink-0">Device</span>
+        <div className="flex items-center gap-1.5 overflow-x-auto scroll-touch" style={{ touchAction: "pan-x", paddingBottom: 2 }}>
+          <span className="label-cap shrink-0" style={{ width: 52 }}>Device</span>
           {devices.map((d: any, i: number) => {
             const id = (d as any).nsid ?? (d as any).raw?.id ?? i;
             const active = appointedId !== null && id === appointedId;
             const armed = armingDevId !== null && String(armingDevId) === String(id);
             const label = d.raw?.name ?? d.raw?.class_name ?? `Device ${i + 1}`;
             return (
-              <button
-                key={String(id)}
-                onClick={() => {
-                  if (armed) void deleteDevice(i, label);
-                  else void selectDevice(d);
-                }}
-                onDoubleClick={() => armDelete(String(id))}
-                title={armed ? "Toca de nuevo para borrar" : "Doble-tap para borrar"}
-                className="tactile shrink-0"
-                style={{
-                  height: 32,
-                  padding: "0 12px",
-                  fontSize: 12,
-                  fontWeight: 600,
-                  color: armed
-                    ? "var(--color-text-inverse)"
-                    : active
-                      ? "var(--color-accent-macro)"
-                      : "var(--color-text-2)",
-                  background: armed
-                    ? "var(--color-critical)"
-                    : "var(--color-surface-2)",
-                  border: `1.5px solid ${
-                    armed
-                      ? "var(--color-critical)"
-                      : active
-                        ? "var(--color-accent-macro)"
-                        : "var(--color-border)"
-                  }`,
-                  borderRadius: 8,
-                  maxWidth: 180,
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap",
-                }}
-              >
-                {armed ? `¿Borrar ${label}?` : label}
-              </button>
+              <span key={String(id)} onDoubleClick={() => armDelete(String(id))} className="shrink-0 flex">
+                <LedKey
+                  size="sm"
+                  variant={armed ? "fill" : "dot"}
+                  color={armed ? "critical" : "macro"}
+                  active={armed || active}
+                  onClick={() => {
+                    if (armed) void deleteDevice(i, label);
+                    else void selectDevice(d);
+                  }}
+                  title={armed ? "Toca de nuevo para borrar" : "Doble toque para borrar"}
+                  label={armed ? `¿Borrar ${label}?` : label}
+                  height={38}
+                  style={{ maxWidth: 200, textTransform: "none", letterSpacing: "0.02em", fontSize: 13 }}
+                />
+              </span>
             );
           })}
         </div>

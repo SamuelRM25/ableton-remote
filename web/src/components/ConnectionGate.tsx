@@ -2,6 +2,7 @@ import { useState } from "react";
 import { abletonStore } from "../lib/ableton-store";
 import { useConnectionStatus, useSettings } from "../lib/hooks";
 import { IconArrowRight, IconX } from "./icons";
+import { Led } from "./hw";
 
 interface Props {
   onDismiss: () => void;
@@ -14,38 +15,21 @@ export function ConnectionGate({ onDismiss }: Props) {
   const [port, setPort] = useState(String(settings.port));
   const [password, setPassword] = useState(settings.password ?? "");
 
-  if (status.kind === "connected") {
+  // Connected: the LED in the top bar says it all — no card over the music.
+  if (status.kind === "connected") return null;
+
+  // While reconnecting on its own, don't throw a modal over the stage.
+  if (status.kind === "connecting" || status.kind === "disconnected") {
     return (
       <div
-        className="fixed bottom-28 right-5 panel-raised px-4 py-3 flex items-center gap-3"
-        style={{ zIndex: 10 }}
+        role="status"
+        className="fixed left-1/2 -translate-x-1/2 panel-raised flex items-center gap-3"
+        style={{ top: 76, zIndex: 60, padding: "10px 16px" }}
       >
-        <span
-          className="w-2 h-2 rounded-full"
-          style={{
-            background: "var(--color-accent-link)",
-            boxShadow:
-              "0 0 0 4px color-mix(in srgb, var(--color-accent-link) 22%, transparent)",
-          }}
-        />
-        <span className="label-cap" style={{ color: "var(--color-text-1)" }}>
-          Live conectado
+        <Led on color="cue" size={7} blink />
+        <span style={{ fontSize: 14, fontWeight: 600 }}>
+          {status.kind === "connecting" ? "Conectando con Live…" : "Se perdió la conexión. Reintentando…"}
         </span>
-        <button
-          onClick={onDismiss}
-          className="tactile"
-          style={{
-            width: 24,
-            height: 24,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            color: "var(--color-text-3)",
-            borderRadius: 6,
-          }}
-        >
-          <IconX size={14} />
-        </button>
       </div>
     );
   }
@@ -102,11 +86,10 @@ export function ConnectionGate({ onDismiss }: Props) {
             <input
               value={host}
               onChange={(e) => setHost(e.target.value)}
-              className="w-full tactile"
+              className="w-full well"
               style={{
                 height: 40,
                 padding: "0 12px",
-                background: "var(--color-surface-2)",
                 color: "var(--color-text-1)",
                 fontFamily: "var(--font-mono)",
                 fontSize: 14,
@@ -122,11 +105,10 @@ export function ConnectionGate({ onDismiss }: Props) {
               value={port}
               onChange={(e) => setPort(e.target.value)}
               inputMode="numeric"
-              className="w-full tactile"
+              className="w-full well"
               style={{
                 height: 40,
                 padding: "0 12px",
-                background: "var(--color-surface-2)",
                 color: "var(--color-text-1)",
                 fontFamily: "var(--font-mono)",
                 fontSize: 14,
@@ -142,11 +124,10 @@ export function ConnectionGate({ onDismiss }: Props) {
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full tactile"
+              className="w-full well"
               style={{
                 height: 40,
                 padding: "0 12px",
-                background: "var(--color-surface-2)",
                 color: "var(--color-text-1)",
                 fontFamily: "var(--font-mono)",
                 fontSize: 14,
@@ -213,15 +194,9 @@ export function ConnectionGate({ onDismiss }: Props) {
               gap: 8,
             }}
           >
-            {status.kind === "connecting" ? (
-              <>
-                <Spinner /> Conectando…
-              </>
-            ) : (
-              <>
-                Conectar <IconArrowRight size={16} />
-              </>
-            )}
+            <>
+              Conectar <IconArrowRight size={16} />
+            </>
           </button>
           <button
             onClick={onDismiss}
@@ -242,24 +217,6 @@ export function ConnectionGate({ onDismiss }: Props) {
         </div>
       </div>
     </div>
-  );
-}
-
-function Spinner() {
-  return (
-    <span
-      style={{
-        width: 14,
-        height: 14,
-        borderRadius: "50%",
-        border: "2px solid currentColor",
-        borderTopColor: "transparent",
-        animation: "spin 0.8s linear infinite",
-        display: "inline-block",
-      }}
-    >
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-    </span>
   );
 }
 

@@ -22,6 +22,31 @@ export interface AbletonStore {
 }
 
 let pingTimer: number | null = null;
+let reconnectTimer: number | null = null;
+let reconnectDelay = 1500;
+/** Set when the user (or settings change) closes the socket on purpose. */
+let manualClose = false;
+
+function clearReconnect() {
+  if (reconnectTimer !== null) {
+    window.clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
+}
+
+/**
+ * On stage the WiFi can blink. Instead of waiting for someone to press
+ * "Retry", reconnect on our own with a gentle backoff (1.5 s → 8 s).
+ */
+function scheduleReconnect(connect: () => Promise<void>) {
+  if (manualClose || authFailure) return;
+  clearReconnect();
+  reconnectTimer = window.setTimeout(() => {
+    reconnectTimer = null;
+    void connect();
+  }, reconnectDelay);
+  reconnectDelay = Math.min(8000, Math.round(reconnectDelay * 1.6));
+}
 let lastPingSentAt = 0;
 let authFailure = false;
 
@@ -42,6 +67,8 @@ export const abletonStore = createStore<AbletonStore>((set, get) => ({
     const endpoint = abletonEndpoint();
     set({ status: { kind: "connecting" }, client: null, latencyMs: null });
     authFailure = false;
+    manualClose = false;
+    clearReconnect();
 
     const client = new Ableton({
       host: endpoint.host,
@@ -51,6 +78,7 @@ export const abletonStore = createStore<AbletonStore>((set, get) => ({
     });
 
     client.on("connect", () => {
+      reconnectDelay = 1500;
       set({ status: { kind: "connected" }, client });
       startPingLoop(client, (ms) => set({ latencyMs: ms }));
     });
@@ -63,6 +91,7 @@ export const abletonStore = createStore<AbletonStore>((set, get) => ({
           set({ status: { kind: "auth_failed" }, client: null });
         } else {
           set({ status: { kind: "disconnected" }, client: null });
+          scheduleReconnect(get().connect);
         }
       }
     });
@@ -74,21 +103,27 @@ export const abletonStore = createStore<AbletonStore>((set, get) => ({
         authFailure = true;
       }
       stopPingLoop();
+      if (get().client !== client && get().status.kind !== "connecting") return;
       set({
         status: { kind: authFailure ? "auth_failed" : "error", message },
         client: null,
       });
+      scheduleReconnect(get().connect);
     });
 
     try {
       await client.start();
     } catch (err) {
       const message = err instanceof Error ? err.message : "No se pudo conectar a Live";
-      set({ status: { kind: "error", message }, client: null });
+      if (/password|auth/i.test(message)) authFailure = true;
+      set({ status: { kind: authFailure ? "auth_failed" : "error", message }, client: null });
+      scheduleReconnect(get().connect);
     }
   },
 
   disconnect() {
+    manualClose = true;
+    clearReconnect();
     const { client } = get();
     if (client) {
       void client.close();
@@ -99,6 +134,7 @@ export const abletonStore = createStore<AbletonStore>((set, get) => ({
 
   reconnect() {
     get().disconnect();
+    reconnectDelay = 1500;
     void get().connect();
   },
 }));

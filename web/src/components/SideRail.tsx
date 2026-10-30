@@ -52,99 +52,105 @@ export function SideRail({ active, onSelect, mobile }: Props) {
   if (mobile) {
     return (
       <nav
-        className="shrink-0 flex items-stretch gap-1 overflow-x-auto scroll-touch px-2 pb-safe"
+        aria-label="Vistas"
+        className="shrink-0 flex items-stretch gap-1.5 overflow-x-auto scroll-touch px-2"
         style={{
-          background: "var(--color-surface-1)",
-          borderTop: "1px solid var(--color-border)",
-          paddingTop: 6,
-          paddingBottom: "calc(6px + env(safe-area-inset-bottom))",
+          background: "linear-gradient(180deg, #1c1e22, #151619)",
+          borderTop: "1px solid rgba(0,0,0,0.85)",
+          boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05)",
+          paddingTop: 7,
+          paddingBottom: "calc(7px + env(safe-area-inset-bottom))",
         }}
       >
-        {NAV.map(({ id, label, Icon }) => {
-          const isActive = id === active;
-          return (
-            <button
-              key={id}
-              onClick={() => onSelect(id)}
-              className="flex flex-col items-center justify-center gap-0.5 rounded-lg shrink-0"
-              style={{
-                minWidth: 62,
-                padding: "6px 4px",
-                background: isActive ? "var(--color-surface-3)" : "transparent",
-              }}
-            >
-              <span
-                className="flex items-center justify-center"
-                style={{
-                  color: isActive
-                    ? "var(--color-accent-link)"
-                    : "var(--color-text-2)",
-                }}
-              >
-                <Icon size={20} />
-              </span>
-              <span
-                className="label-cap"
-                style={{
-                  color: isActive
-                    ? "var(--color-text-1)"
-                    : "var(--color-text-3)",
-                  fontSize: 8.5,
-                }}
-              >
-                {label}
-              </span>
-            </button>
-          );
-        })}
+        {NAV.map((item) => (
+          <RailKey key={item.id} item={item} active={item.id === active} onSelect={onSelect} compact />
+        ))}
       </nav>
     );
   }
 
   return (
     <nav
-      className="w-20 shrink-0 flex flex-col items-stretch py-3 gap-1 overflow-y-auto scroll-touch"
+      aria-label="Vistas"
+      className="shrink-0 flex flex-col items-stretch py-3 px-2 gap-1.5 overflow-y-auto scroll-touch"
       style={{
-        background: "var(--color-surface-1)",
-        borderRight: "1px solid var(--color-border)",
+        width: 84,
+        background: "linear-gradient(90deg, #17181b, #1c1e22)",
+        borderRight: "1px solid rgba(0,0,0,0.85)",
+        boxShadow: "inset -1px 0 0 rgba(255,255,255,0.04)",
       }}
     >
-      {NAV.map(({ id, label, Icon }) => {
-        const isActive = id === active;
-        return (
-          <button
-            key={id}
-            onClick={() => onSelect(id)}
-            className="group flex flex-col items-center justify-center gap-1 py-2.5 mx-2 rounded-lg active:tactile-active"
-            style={{
-              background: isActive ? "var(--color-surface-3)" : "transparent",
-              transition: "background 120ms var(--ease-instrument)",
-            }}
-          >
-            <span
-              className="flex items-center justify-center w-10 h-10 rounded-md"
-              style={{
-                color: isActive
-                  ? "var(--color-accent-link)"
-                  : "var(--color-text-2)",
-              }}
-            >
-              <Icon size={22} />
-            </span>
-            <span
-              className="label-cap"
-              style={{
-                color: isActive
-                  ? "var(--color-text-1)"
-                  : "var(--color-text-3)",
-                fontSize: 9.5,
-              }}
-            >
-              {label}
-            </span>
-          </button>
-        );
-      })}
+      {NAV.map((item) => (
+        <RailKey key={item.id} item={item} active={item.id === active} onSelect={onSelect} />
+      ))}
     </nav>
+  );
+}
+
+function RailKey({
+  item: { id, label, Icon },
+  active,
+  onSelect,
+  compact,
+}: {
+  item: NavItem;
+  active: boolean;
+  onSelect: (id: ViewId) => void;
+  compact?: boolean;
+}) {
+  const led = "var(--color-accent-link)";
+  return (
+    <button
+      onClick={() => onSelect(id)}
+      aria-current={active ? "page" : undefined}
+      className="tactile relative flex flex-col items-center justify-center shrink-0"
+      style={{
+        gap: compact ? 3 : 5,
+        minWidth: compact ? 64 : undefined,
+        padding: compact ? "7px 6px 6px" : "10px 4px 8px",
+        borderRadius: 9,
+        background: active
+          ? "linear-gradient(180deg, #3a3e46, #2b2e34)"
+          : undefined,
+        boxShadow: active
+          ? `inset 0 1px 0 rgba(255,255,255,0.1), inset 0 0 0 1px color-mix(in srgb, ${led} 35%, transparent), 0 1px 0 rgba(0,0,0,0.6)`
+          : undefined,
+      }}
+    >
+      {/* LED slit */}
+      <span
+        aria-hidden
+        style={{
+          position: "absolute",
+          top: 4,
+          left: "50%",
+          width: 16,
+          height: 2,
+          marginLeft: -8,
+          borderRadius: 1,
+          background: active ? led : "rgba(0,0,0,0.55)",
+          boxShadow: active ? `0 0 6px ${led}, 0 0 12px color-mix(in srgb, ${led} 50%, transparent)` : "inset 0 0 0 0.5px rgba(255,255,255,0.04)",
+        }}
+      />
+      <span
+        className="flex items-center justify-center"
+        style={{
+          marginTop: 3,
+          color: active ? "var(--color-text-1)" : "var(--color-text-2)",
+          filter: active ? `drop-shadow(0 0 5px color-mix(in srgb, ${led} 60%, transparent))` : undefined,
+        }}
+      >
+        <Icon size={compact ? 19 : 21} />
+      </span>
+      <span
+        className="label-cap"
+        style={{
+          fontSize: compact ? 9.5 : 10,
+          color: active ? "var(--color-text-1)" : "var(--color-text-3)",
+        }}
+      >
+        {label}
+      </span>
+    </button>
   );
 }

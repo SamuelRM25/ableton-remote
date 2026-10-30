@@ -10,6 +10,8 @@ const KNOWN_NON_LISTENABLE = new Set<string>([
   "mixer-device:volume",
   "mixer-device:panning",
   "mixer-device:cue_volume",
+  "device-parameter:value_string",
+  "track:can_be_armed",
 ]);
 
 const failedListeners = new Set<string>(KNOWN_NON_LISTENABLE);
@@ -293,7 +295,7 @@ export function useMixerParam(
   mixer: any,
   prop: string,
   pollMs = 1000,
-): readonly [number | undefined, (v: number) => void] {
+): readonly [number | undefined, (v: number) => void, string | undefined] {
   const client = useAbleton();
   // Normalized to the raw parameter id when the mixer returns a plain
   // object (volume), or the DeviceParameter instance when transformed.
@@ -361,17 +363,20 @@ export function useMixerParam(
         if (!cancelled) setValue(next);
       };
       try {
+        let unsub: (() => Promise<unknown>) | null = null;
         if (paramInstance) {
-          const unsub = await paramInstance.addListener("value", onUpdate);
-          off = unsub;
+          unsub = await paramInstance.addListener("value", onUpdate);
         } else if (paramId) {
-          const unsub = await client.addPropListener(
+          unsub = await client.addPropListener(
             "device-parameter",
             paramId,
             "value",
             onUpdate,
           );
-          off = unsub;
+        }
+        if (unsub) {
+          if (cancelled) void unsub().catch(() => {});
+          else off = unsub;
         }
       } catch {
         // not listenable — polling below covers it
@@ -391,6 +396,28 @@ export function useMixerParam(
     };
   }, [client, paramInstance, paramId, pollMs]);
 
+  // Live's own readout for the value ("-6.0 dB", "12R"…). Not listenable,
+  // so it is re-read shortly after the value settles.
+  const [display, setDisplay] = useState<string | undefined>(undefined);
+  useEffect(() => {
+    if (!client || value === undefined || (!paramInstance && !paramId)) return;
+    let cancelled = false;
+    const t = window.setTimeout(async () => {
+      try {
+        const str = paramInstance
+          ? await paramInstance.get("value_string")
+          : await client.getProp("device-parameter", paramId!, "value_string" as any);
+        if (!cancelled && typeof str === "string") setDisplay(str);
+      } catch {
+        // older MIDI script without value_string — caller falls back
+      }
+    }, 150);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(t);
+    };
+  }, [client, value, paramInstance, paramId]);
+
   const set = (v: number) => {
     if (!client) return;
     try {
@@ -400,5 +427,30 @@ export function useMixerParam(
       // ignore
     }
   };
-  return [value, set] as const;
+  return [value, set, display] as const;
+}
+
+/**
+ * Live's display text for a DeviceParameter ("-12.0 dB", "1.20 kHz"…),
+ * re-read whenever its value changes (value_string has no listener).
+ */
+export function useParamDisplay(param: any, value: number | undefined): string | undefined {
+  const [display, setDisplay] = useState<string | undefined>(undefined);
+  useEffect(() => {
+    if (!param || value === undefined) return;
+    let cancelled = false;
+    const t = window.setTimeout(async () => {
+      try {
+        const str = await param.get("value_string");
+        if (!cancelled && typeof str === "string") setDisplay(str);
+      } catch {
+        // MIDI script without value_string — caller shows its own format
+      }
+    }, 90);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(t);
+    };
+  }, [param, value]);
+  return display;
 }

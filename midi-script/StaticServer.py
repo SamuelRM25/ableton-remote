@@ -10,6 +10,9 @@ STATIC_ROOT = os.path.realpath(os.path.join(os.path.dirname(__file__), "static")
 
 mimetypes.add_type("text/html", ".html")
 mimetypes.add_type("text/css", ".css")
+# Bundled fonts (the UI ships its own type so it works offline on stage).
+mimetypes.add_type("font/woff2", ".woff2")
+mimetypes.add_type("font/woff", ".woff")
 mimetypes.add_type("application/javascript", ".js")
 mimetypes.add_type("application/json", ".json")
 mimetypes.add_type("application/json", ".map")

@@ -28,18 +28,17 @@ export function SessionGrid({
 }: Props) {
   const cols = trackIds.length;
   const totalCols = cols + 1; // +1 for the scene name column on the right
-  const totalRows = sceneCount + 1; // +1 for the track header row on top
 
   return (
     <div
-      className="flex-1 min-h-0 overflow-auto"
-      style={{ background: "var(--color-bg)" }}
+      className="flex-1 min-h-0 overflow-auto scroll-touch"
+      style={{ background: "#121316" }}
     >
       <div
         style={{
           display: "grid",
           gridTemplateColumns: `repeat(${cols}, ${CELL_W}px) ${SCENE_NAME_W}px`,
-          gridAutoRows: `${CELL_H}px`,
+          gridTemplateRows: `${TRACK_HEADER_H}px repeat(${Math.max(1, sceneCount)}, ${CELL_H}px)`,
           width: "max-content",
         }}
       >
@@ -54,11 +53,13 @@ export function SessionGrid({
                 position: "sticky",
                 top: 0,
                 zIndex: 3,
-                background: "var(--color-surface-1)",
-                borderBottom: "1px solid var(--color-border)",
-                borderRight: "1px solid var(--color-border)",
+                background: "linear-gradient(180deg, #23252a, #1b1d21)",
+                borderBottom: "1px solid rgba(0,0,0,0.85)",
+                borderRight: "1px solid rgba(0,0,0,0.6)",
+                boxShadow: "inset -1px 0 0 rgba(255,255,255,0.03), 0 4px 10px rgba(0,0,0,0.35)",
                 height: TRACK_HEADER_H,
-                gridRow: "1",
+                gridRow: 1,
+                gridColumn: idx + 1,
               }}
             >
               <TrackHeader client={client} track={track} index={idx} />
@@ -73,9 +74,10 @@ export function SessionGrid({
             top: 0,
             right: 0,
             zIndex: 4,
-            background: "var(--color-surface-1)",
-            borderBottom: "1px solid var(--color-border)",
-            borderLeft: "1px solid var(--color-border)",
+            background: "linear-gradient(180deg, #23252a, #1b1d21)",
+            borderBottom: "1px solid rgba(0,0,0,0.85)",
+            borderLeft: "1px solid rgba(0,0,0,0.85)",
+            boxShadow: "0 4px 10px rgba(0,0,0,0.35)",
             height: TRACK_HEADER_H,
             gridRow: "1",
             gridColumn: totalCols,
@@ -85,12 +87,7 @@ export function SessionGrid({
             paddingBottom: 12,
           }}
         >
-          <span
-            className="label-cap"
-            style={{ color: "var(--color-text-3)" }}
-          >
-            Scene
-          </span>
+          <StopAllButton client={client} />
         </div>
 
         {/* Clip cells: each row is a scene */}
@@ -98,16 +95,13 @@ export function SessionGrid({
           trackIds.map((trackId, trackIdx) => {
             const track = trackMap.get(trackId);
             if (!track) return null;
-            const isLastCol = trackIdx === trackIds.length - 1;
             return (
               <div
                 key={`${trackId}-${sceneIdx}`}
                 style={{
-                  borderRight: isLastCol
-                    ? "1px solid var(--color-border)"
-                    : undefined,
-                  borderBottom: "1px solid var(--color-border)",
-                  background: "var(--color-surface-1)",
+                  gridRow: sceneIdx + 2,
+                  gridColumn: trackIdx + 1,
+                  background: "transparent",
                 }}
               >
                 <ClipCell
@@ -129,10 +123,11 @@ export function SessionGrid({
               position: "sticky",
               right: 0,
               zIndex: 2,
-              background: "var(--color-surface-1)",
-              borderLeft: "1px solid var(--color-border)",
-              borderBottom: "1px solid var(--color-border)",
+              background: "linear-gradient(90deg, #1b1d21, #202226)",
+              borderLeft: "1px solid rgba(0,0,0,0.85)",
+              boxShadow: "-6px 0 14px rgba(0,0,0,0.35)",
               gridColumn: totalCols,
+              gridRow: sceneIdx + 2,
             }}
           >
             <SceneHeader client={client} sceneIdx={sceneIdx} editMode={editMode} />
@@ -140,5 +135,19 @@ export function SessionGrid({
         ))}
       </div>
     </div>
+  );
+}
+
+function StopAllButton({ client }: { client: Ableton }) {
+  return (
+    <button
+      onClick={() => void client.song.stopAllClips().catch(() => {})}
+      className="tactile flex items-center gap-2"
+      style={{ height: 32, padding: "0 12px" }}
+      title="Parar todos los clips"
+    >
+      <span style={{ width: 9, height: 9, borderRadius: 1.5, background: "var(--color-accent-stop)", boxShadow: "0 0 6px var(--color-accent-stop)" }} />
+      <span className="label-cap" style={{ fontSize: 10, color: "var(--color-text-2)" }}>Stop all</span>
+    </button>
   );
 }

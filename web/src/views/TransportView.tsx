@@ -1,434 +1,274 @@
-import { useAbleton, useLiveProp } from "../lib/hooks";
+import { useAbleton, useLiveProp, useSongToggle } from "../lib/hooks";
 import { TempoDial } from "../components/TempoDial";
 import { useLiveRawList } from "../lib/list-hooks";
 import { toast } from "../lib/toast";
 import { jumpToTime } from "../lib/cue-jump";
-import { useSongClock, formatTimeMs } from "../lib/clock";
+import { useSongClock, formatTimeMs, beatsToBarLabel } from "../lib/clock";
+import { EmptyPanel, LedKey, Plate } from "../components/hw";
+
+function run(p: Promise<unknown> | undefined, msg: string) {
+  void p?.catch(() => toast(msg));
+}
 
 export function TransportView() {
   const client = useAbleton();
-  const tempo = useLiveProp<any>(client, (c) => c.song, "tempo");
-  const signatureNum = useLiveProp<any>(client, (c) => c.song, "signature_numerator");
-  const signatureDen = useLiveProp<any>(client, (c) => c.song, "signature_denominator");
-  const loop = useLiveProp<any>(client, (c) => c.song, "loop");
-  const punchIn = useLiveProp<any>(client, (c) => c.song, "punch_in");
-  const punchOut = useLiveProp<any>(client, (c) => c.song, "punch_out");
-  const overdub = useLiveProp<any>(client, (c) => c.song, "overdub");
-  const metronome = useLiveProp<any>(client, (c) => c.song, "metronome");
-  const countIn = useLiveProp<any>(client, (c) => c.song, "count_in_duration");
+  const tempo = useLiveProp<number>(client, (c) => c.song, "tempo");
+  const signatureNum = useLiveProp<number>(client, (c) => c.song, "signature_numerator");
+  const signatureDen = useLiveProp<number>(client, (c) => c.song, "signature_denominator");
+  const countIn = useLiveProp<number>(client, (c) => c.song, "count_in_duration");
+  const backToArranger = !!useLiveProp<boolean>(client, (c) => c.song, "back_to_arranger");
   const clock = useSongClock(client);
   const cuePoints = useLiveRawList<any>("song", "cue_points");
 
-  if (!client) return <Center>Sin conexión</Center>;
+  const err = (m: string) => () => toast(m);
+  const [loop, toggleLoop] = useSongToggle(client, "loop", err("No se pudo cambiar el loop"));
+  const [punchIn, togglePunchIn] = useSongToggle(client, "punch_in", err("No se pudo cambiar punch in"));
+  const [punchOut, togglePunchOut] = useSongToggle(client, "punch_out", err("No se pudo cambiar punch out"));
+  const [overdub, toggleOverdub] = useSongToggle(client, "arrangement_overdub", err("No se pudo cambiar overdub"));
+  const [metronome, toggleMetronome] = useSongToggle(client, "metronome", err("No se pudo cambiar el click"));
+  const [rec, toggleRec] = useSongToggle(client, "record_mode", err("No se pudo activar la grabación"));
+  const [sesRec, toggleSesRec] = useSongToggle(client, "session_record", err("No se pudo activar Session Record"));
+  const [automation, toggleAutomation] = useSongToggle(client, "session_automation_record", err("No se pudo cambiar automation arm"));
+
+  if (!client) {
+    return <EmptyPanel title="Live no está conectado" hint="Abre Ableton Live con AbletonJS activo como Control Surface." />;
+  }
+
+  const bpb = clock.beatsPerBar;
+  // One bar in Live beats (quarter notes) for the current signature.
+  const barBeats = (bpb * 4) / clock.beatUnit;
 
   return (
-    <div className="h-full overflow-auto scroll-touch p-4 sm:p-6">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5 max-w-5xl">
-        <Panel title="Tempo">
-          <div className="flex items-end gap-6">
-            {tempo !== undefined && (
-              <>
-                <TempoDial
-                  tempo={tempo}
-                  onChange={(t) => client.song.set("tempo", t)}
-                />
-                <div className="flex flex-col gap-2 pb-1">
-                  <SmallButton label="Tap" onClick={() => client.song.tapTempo()} />
-                  <SmallButton
-                    label="Nudge −"
-                    onClick={() => client.song.set("nudge_down", true)}
-                  />
-                  <SmallButton
-                    label="Nudge +"
-                    onClick={() => client.song.set("nudge_up", true)}
-                  />
-                </div>
-              </>
-            )}
-          </div>
-        </Panel>
-
-        <Panel title="Time signature">
-          <div className="flex items-end gap-4">
-            <NumberStepper
-              label="Beats"
-              value={signatureNum ?? 4}
-              min={1}
-              max={32}
-              onChange={(v) => client.song.set("signature_numerator", v)}
-            />
-            <span
-              className="value-mono"
-              style={{ fontSize: 36, color: "var(--color-text-3)", paddingBottom: 14 }}
-            >
-              /
-            </span>
-            <NumberStepper
-              label="Unit"
-              value={signatureDen ?? 4}
-              min={1}
-              max={32}
-              onChange={(v) => client.song.set("signature_denominator", v)}
-            />
-          </div>
-        </Panel>
-
-        <Panel title="Modes">
-          <div className="grid grid-cols-2 gap-2">
-            <BigToggle
-              label="Loop arrangement"
-              active={!!loop}
-              onClick={() => client.song.set("loop", !loop)}
-              color="var(--color-accent-cue)"
-            />
-            <BigToggle
-              label="Punch in"
-              active={!!punchIn}
-              onClick={() => client.song.set("punch_in", !punchIn)}
-              color="var(--color-accent-rec)"
-            />
-            <BigToggle
-              label="Punch out"
-              active={!!punchOut}
-              onClick={() => client.song.set("punch_out", !punchOut)}
-              color="var(--color-accent-rec)"
-            />
-            <BigToggle
-              label="Overdub"
-              active={!!overdub}
-              onClick={() => client.song.set("overdub", !overdub)}
-              color="var(--color-accent-macro)"
-            />
-            <BigToggle
-              label="Click"
-              active={!!metronome}
-              onClick={() => client.song.set("metronome", metronome ? 0 : 1)}
-              color="var(--color-accent-cue)"
-            />
-            <div className="flex flex-col gap-1.5">
-              <span className="label-cap">Count-in bars</span>
-              <div
-                className="value-mono flex items-center justify-center"
-                style={{
-                  width: 64,
-                  height: 56,
-                  background: "var(--color-surface-2)",
-                  border: "1px solid var(--color-border)",
-                  borderRadius: 6,
-                  fontSize: 28,
-                  fontWeight: 700,
-                  color: "var(--color-text-1)",
-                }}
-              >
-                {countIn ?? "—"}
-              </div>
-              <span className="label-cap" style={{ fontSize: 9 }}>
-                Solo lectura · se cambia en Live
-              </span>
-            </div>
-          </div>
-        </Panel>
-
-        <Panel title="Cue points">
-          <div className="flex flex-col gap-2 max-h-64 overflow-auto">
-            {cuePoints && cuePoints.length > 0 ? (
-              cuePoints.map((cp, i) => (
-                <button
-                  key={cp.id ?? i}
-                  onClick={() => {
-                    void jumpToTime(client, Number(cp.time ?? 0)).catch(() =>
-                      toast("No se pudo saltar a la marca"),
-                    );
-                  }}
-                  className="tactile flex items-center gap-3 px-3"
-                  style={{ height: 44 }}
-                >
-                  <span
-                    className="value-mono"
-                    style={{
-                      fontSize: 11,
-                      color: "var(--color-accent-cue)",
-                      width: 18,
-                    }}
-                  >
-                    {String(i + 1).padStart(2, "0")}
-                  </span>
-                  <span
-                    className="truncate flex-1 text-left"
-                    style={{ fontSize: 13, color: "var(--color-text-1)" }}
-                  >
-                    {cp.name || `Cue ${i + 1}`}
-                  </span>
-                  <span
-                    className="value-mono"
-                    style={{ fontSize: 11, color: "var(--color-text-3)" }}
-                  >
-                    {cp.time?.toFixed(2)}s
-                  </span>
-                </button>
-              ))
-            ) : (
-              <div className="label-cap" style={{ color: "var(--color-text-3)" }}>
-                Sin cue points. Toca el setlist para crear.
-              </div>
-            )}
-            <div className="flex gap-2 mt-1">
-              <SmallButton
-                label="← Previous"
-                onClick={() => client.song.jumpToPrevCue()}
-                flex
-              />
-              <SmallButton
-                label="Next →"
-                onClick={() => client.song.jumpToNextCue()}
-                flex
-              />
-              <SmallButton
-                label="Add here"
-                onClick={() => client.song.setOrDeleteCue()}
-                flex
-              />
-            </div>
-          </div>
-        </Panel>
-
-        <Panel title="Position">
-          <div className="flex items-end gap-6 flex-wrap">
+    <div className="h-full overflow-auto scroll-touch p-3 sm:p-5">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 sm:gap-4 max-w-6xl mx-auto">
+        {/* Position — the big readout */}
+        <Plate title="Posición" className="md:col-span-2 xl:col-span-2">
+          <div className="vfd flex flex-wrap items-end gap-x-8 gap-y-3" style={{ padding: "18px 22px" }}>
             <div>
-              <div
-                className="value-mono"
-                style={{
-                  fontSize: "clamp(40px, 12vw, 56px)",
-                  fontWeight: 700,
-                  color: "var(--color-text-1)",
-                  lineHeight: 1,
-                  letterSpacing: "-0.02em",
-                }}
-              >
+              <div className="seg" style={{ fontSize: "clamp(40px, 9vw, 72px)", lineHeight: 1 }}>
+                {clock.barsDisplay}
+              </div>
+              <div style={vfdCaption}>Compás · tiempo · semicorchea</div>
+            </div>
+            <div>
+              <div className="seg" style={{ fontSize: "clamp(24px, 5vw, 36px)", lineHeight: 1 }}>
                 {formatTimeMs(clock.timeSec)}
               </div>
-              <div className="label-cap" style={{ marginTop: 6 }}>
-                Bars {clock.barsDisplay} · {clock.signatureDisplay}
+              <div style={vfdCaption}>Minutos</div>
+            </div>
+            <div>
+              <div className="seg" style={{ fontSize: "clamp(24px, 5vw, 36px)", lineHeight: 1 }}>
+                {clock.signatureDisplay}
+              </div>
+              <div style={vfdCaption}>Compás</div>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2 mt-4">
+            <LedKey size="md" label="− 1 compás" onClick={() => run(client.song.jumpBy(-barBeats), "No se pudo mover")} />
+            <LedKey size="md" label="+ 1 compás" onClick={() => run(client.song.jumpBy(barBeats), "No se pudo mover")} />
+            <LedKey size="md" label="Al inicio" onClick={() => run(jumpToTime(client, 0), "No se pudo mover")} />
+          </div>
+        </Plate>
+
+        {/* Tempo */}
+        <Plate title="Tempo">
+          {tempo !== undefined && (
+            <div className="flex flex-col gap-3">
+              <TempoDial
+                size="large"
+                tempo={tempo}
+                onChange={(t) => run(client.song.set("tempo", t), "No se pudo cambiar el tempo")}
+              />
+              <div className="grid grid-cols-3 gap-2">
+                <LedKey size="md" label="Tap" onClick={() => run(client.song.tapTempo(), "No se pudo marcar el tempo")} />
+                <LedKey size="md" label="Nudge −" onClick={() => run(client.song.set("nudge_down", true), "No se pudo")} />
+                <LedKey size="md" label="Nudge +" onClick={() => run(client.song.set("nudge_up", true), "No se pudo")} />
+              </div>
+              <div className="grid grid-cols-4 gap-2">
+                {[-1, -0.1, 0.1, 1].map((d) => (
+                  <LedKey
+                    key={d}
+                    size="sm"
+                    label={`${d > 0 ? "+" : "−"}${Math.abs(d)}`}
+                    onClick={() =>
+                      run(
+                        client.song.set("tempo", Math.round((tempo + d) * 100) / 100),
+                        "No se pudo cambiar el tempo",
+                      )
+                    }
+                  />
+                ))}
               </div>
             </div>
-            <div className="flex flex-col gap-2">
-              <SmallButton
-                label="−1 bar"
-                onClick={() => {
-                  const sec = ((60 / clock.tempo) * clock.beatsPerBar).toFixed(3);
-                  void client.song
-                    .jumpBy(-Number(sec))
-                    .catch(() => toast("No se pudo mover"));
-                }}
-              />
-              <SmallButton
-                label="+1 bar"
-                onClick={() => {
-                  const sec = ((60 / clock.tempo) * clock.beatsPerBar).toFixed(3);
-                  void client.song
-                    .jumpBy(Number(sec))
-                    .catch(() => toast("No se pudo mover"));
-                }}
-              />
-            </div>
-          </div>
-        </Panel>
+          )}
+        </Plate>
 
-        <Panel title="Edit history">
+        {/* Record */}
+        <Plate title="Grabación">
           <div className="grid grid-cols-2 gap-2">
-            <BigToggle
-              label="Undo"
-              active={false}
-              onClick={() => client.song.undo()}
-              color="var(--color-text-2)"
+            <LedKey size="lg" color="rec" active={rec} blink={rec && clock.isPlaying} label="Rec arreglo" onClick={() => void toggleRec()} />
+            <LedKey size="lg" color="rec" active={sesRec} label="Rec session" onClick={() => void toggleSesRec()} />
+            <LedKey size="lg" color="rec" variant="ring" active={punchIn} label="Punch in" onClick={() => void togglePunchIn()} />
+            <LedKey size="lg" color="rec" variant="ring" active={punchOut} label="Punch out" onClick={() => void togglePunchOut()} />
+            <LedKey size="lg" color="macro" variant="ring" active={overdub} label="Overdub" onClick={() => void toggleOverdub()} />
+            <LedKey size="lg" color="rec" variant="ring" active={automation} label="Automation" onClick={() => void toggleAutomation()} />
+          </div>
+        </Plate>
+
+        {/* Modes */}
+        <Plate title="Modos">
+          <div className="grid grid-cols-2 gap-2">
+            <LedKey size="lg" color="cue" active={loop} label="Loop" onClick={() => void toggleLoop()} />
+            <LedKey size="lg" color="cue" active={metronome} label="Click" onClick={() => void toggleMetronome()} />
+            <LedKey
+              size="lg"
+              color="stop"
+              variant="ring"
+              active={backToArranger}
+              disabled={!backToArranger}
+              label="Al arreglo"
+              title="Volver al arreglo (Back to Arrangement)"
+              // Live: writing false to back_to_arranger presses the button.
+              onClick={() => run(client.song.set("back_to_arranger", false as any), "No se pudo volver al arreglo")}
             />
-            <BigToggle
-              label="Redo"
-              active={false}
-              onClick={() => client.song.redo()}
-              color="var(--color-text-2)"
+            <LedKey size="lg" color="stop" label="Parar clips" onClick={() => run(client.song.stopAllClips(), "No se pudieron parar los clips")} />
+          </div>
+          <div className="flex items-center justify-between mt-4 gap-3">
+            <span style={{ fontSize: 13, color: "var(--color-text-2)" }}>Conteo antes de grabar</span>
+            <span
+              className="vfd"
+              style={{ padding: "6px 12px", fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 15, color: "var(--color-vfd-ink)", textShadow: "0 0 6px rgba(255,178,62,0.45)" }}
+            >
+              {/* Live's count_in_duration is an index: none, 1, 2 or 4 bars. */}
+              {countIn === undefined ? "—" : (["Sin conteo", "1 compás", "2 compases", "4 compases"][countIn] ?? String(countIn))}
+            </span>
+          </div>
+        </Plate>
+
+        {/* Signature */}
+        <Plate title="Compás">
+          <div className="flex items-center justify-center gap-4">
+            <Stepper
+              value={signatureNum ?? 4}
+              min={1}
+              max={99}
+              label="Tiempos"
+              onChange={(v) => run(client.song.set("signature_numerator", v), "No se pudo cambiar el compás")}
             />
-            <BigToggle
-              label="Stop all clips"
-              active={false}
-              onClick={() => client.song.stopAllClips()}
-              color="var(--color-accent-stop)"
-            />
-            <BigToggle
-              label="Back to arranger"
-              active={false}
-              onClick={() => client.song.set("back_to_arranger", 1)}
-              color="var(--color-accent-macro)"
+            <span className="seg" style={{ fontSize: 40, opacity: 0.5 }}>/</span>
+            <Stepper
+              value={signatureDen ?? 4}
+              min={1}
+              max={16}
+              label="Figura"
+              // Live only accepts powers of two for the denominator.
+              onChange={(v) => run(client.song.set("signature_denominator", v), "No se pudo cambiar el compás")}
+              steps={[1, 2, 4, 8, 16]}
             />
           </div>
-        </Panel>
+        </Plate>
+
+        {/* Cue points */}
+        <Plate title="Marcas" aside={<span className="value-mono" style={{ fontSize: 11, color: "var(--color-text-3)" }}>{cuePoints?.length ?? 0}</span>}>
+          <div className="flex flex-col gap-1.5 overflow-auto" style={{ maxHeight: 260 }}>
+            {cuePoints && cuePoints.length > 0 ? (
+              cuePoints.map((cp, i) => {
+                const here = Math.abs(Number(cp.time ?? -1) - clock.beats) < 0.05;
+                return (
+                  <button
+                    key={cp.id ?? i}
+                    onClick={() => run(jumpToTime(client, Number(cp.time ?? 0)), "No se pudo saltar a la marca")}
+                    className="tactile flex items-center gap-3 px-3 shrink-0"
+                    style={{ height: 42, boxShadow: here ? "inset 0 0 0 1px var(--color-accent-cue), var(--shadow-key)" : undefined }}
+                  >
+                    <span
+                      aria-hidden
+                      style={{
+                        width: 0,
+                        height: 0,
+                        borderLeft: "6px solid transparent",
+                        borderRight: "6px solid transparent",
+                        borderTop: "8px solid var(--color-accent-cue)",
+                        filter: here ? "drop-shadow(0 0 4px var(--color-accent-cue))" : undefined,
+                      }}
+                    />
+                    <span className="truncate flex-1 text-left" style={{ fontSize: 14, fontWeight: 600 }}>
+                      {cp.name || `Marca ${i + 1}`}
+                    </span>
+                    <span className="value-mono" style={{ fontSize: 11, color: "var(--color-text-3)" }}>
+                      {beatsToBarLabel(Number(cp.time ?? 0), bpb, clock.beatUnit)}
+                    </span>
+                  </button>
+                );
+              })
+            ) : (
+              <p style={{ fontSize: 13, color: "var(--color-text-2)", margin: 0 }}>
+                No hay marcas en el arreglo. Toca «Marcar aquí» o créalas desde el Setlist.
+              </p>
+            )}
+          </div>
+          <div className="grid grid-cols-3 gap-2 mt-3">
+            <LedKey size="md" color="cue" label="Anterior" onClick={() => run(client.song.jumpToPrevCue(), "No hay marca anterior")} />
+            <LedKey size="md" color="cue" label="Siguiente" onClick={() => run(client.song.jumpToNextCue(), "No hay marca siguiente")} />
+            <LedKey size="md" color="cue" label="Marcar aquí" onClick={() => run(client.song.setOrDeleteCue(), "No se pudo crear la marca")} />
+          </div>
+        </Plate>
+
+        {/* History */}
+        <Plate title="Historial">
+          <div className="grid grid-cols-2 gap-2">
+            <LedKey size="lg" label="Deshacer" onClick={() => run(client.song.undo(), "Nada que deshacer")} />
+            <LedKey size="lg" label="Rehacer" onClick={() => run(client.song.redo(), "Nada que rehacer")} />
+          </div>
+        </Plate>
       </div>
     </div>
   );
 }
 
-function Panel({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div className="panel" style={{ padding: 20 }}>
-      <h3
-        style={{
-          fontSize: 11,
-          fontFamily: "var(--font-mono)",
-          fontWeight: 500,
-          textTransform: "uppercase",
-          letterSpacing: "0.08em",
-          color: "var(--color-text-3)",
-          margin: 0,
-          marginBottom: 16,
-        }}
-      >
-        {title}
-      </h3>
-      {children}
-    </div>
-  );
-}
+const vfdCaption: React.CSSProperties = {
+  marginTop: 8,
+  fontFamily: "var(--font-display)",
+  fontWeight: 600,
+  fontSize: 11,
+  letterSpacing: "0.1em",
+  textTransform: "uppercase",
+  color: "var(--color-vfd-ink)",
+  opacity: 0.55,
+};
 
-function Center({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="h-full flex items-center justify-center">
-      <span className="label-cap" style={{ color: "var(--color-text-3)" }}>
-        {children}
-      </span>
-    </div>
-  );
-}
-
-function BigToggle({
-  label,
-  active,
-  onClick,
-  color,
-}: {
-  label: string;
-  active: boolean;
-  onClick: () => void;
-  color: string;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className="tactile flex items-center justify-center"
-      style={{
-        height: 56,
-        background: active
-          ? `color-mix(in srgb, ${color} 25%, var(--color-surface-2))`
-          : "var(--color-surface-2)",
-        color: active ? color : "var(--color-text-2)",
-        border: `1.5px solid ${active ? color : "var(--color-border)"}`,
-        fontSize: 14,
-        fontWeight: 600,
-        borderRadius: 10,
-        letterSpacing: "-0.005em",
-      }}
-    >
-      {label}
-    </button>
-  );
-}
-
-function NumberStepper({
+function Stepper({
   label,
   value,
   onChange,
   min = 0,
   max = 999,
+  steps,
 }: {
   label: string;
   value: number;
   onChange: (v: number) => void;
   min?: number;
   max?: number;
+  steps?: number[];
 }) {
+  const move = (dir: 1 | -1) => {
+    if (steps) {
+      const i = steps.indexOf(value);
+      const next = steps[Math.max(0, Math.min(steps.length - 1, (i < 0 ? 2 : i) + dir))];
+      onChange(next);
+    } else {
+      onChange(Math.max(min, Math.min(max, value + dir)));
+    }
+  };
   return (
-    <div className="flex flex-col gap-1.5">
-      <span className="label-cap">{label}</span>
-      <div className="flex items-center gap-1">
-        <button
-          className="tactile"
-          style={{
-            width: 36,
-            height: 56,
-            color: "var(--color-text-2)",
-            fontSize: 18,
-            fontWeight: 600,
-            background: "var(--color-surface-2)",
-            border: "1px solid var(--color-border)",
-            borderRadius: 6,
-          }}
-          onClick={() => onChange(Math.max(min, value - 1))}
-        >
-          −
-        </button>
-        <div
-          className="value-mono flex items-center justify-center"
-          style={{
-            width: 64,
-            height: 56,
-            background: "var(--color-surface-2)",
-            border: "1px solid var(--color-border)",
-            borderRadius: 6,
-            fontSize: 28,
-            fontWeight: 700,
-            color: "var(--color-text-1)",
-          }}
-        >
-          {value}
-        </div>
-        <button
-          className="tactile"
-          style={{
-            width: 36,
-            height: 56,
-            color: "var(--color-text-2)",
-            fontSize: 18,
-            fontWeight: 600,
-            background: "var(--color-surface-2)",
-            border: "1px solid var(--color-border)",
-            borderRadius: 6,
-          }}
-          onClick={() => onChange(Math.min(max, value + 1))}
-        >
-          +
-        </button>
-      </div>
+    <div className="flex flex-col items-center gap-2">
+      <LedKey size="sm" width={64} label="+" onClick={() => move(1)} style={{ fontSize: 18 }} />
+      <span className="vfd seg flex items-center justify-center" style={{ width: 72, height: 54, fontSize: 30 }}>
+        {value}
+      </span>
+      <LedKey size="sm" width={64} label="−" onClick={() => move(-1)} style={{ fontSize: 18 }} />
+      <span className="label-cap" style={{ fontSize: 10 }}>{label}</span>
     </div>
   );
 }
-
-function SmallButton({
-  label,
-  onClick,
-  flex,
-}: {
-  label: string;
-  onClick: () => void;
-  flex?: boolean;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className="tactile"
-      style={{
-        height: 36,
-        padding: "0 12px",
-        background: "var(--color-surface-2)",
-        color: "var(--color-text-1)",
-        fontSize: 12,
-        fontWeight: 600,
-        border: "1px solid var(--color-border)",
-        borderRadius: 6,
-        flex: flex ? 1 : undefined,
-      }}
-    >
-      {label}
-    </button>
-  );
-}
-
-

@@ -84,17 +84,17 @@ export function ClipCell({ client, track, sceneIdx, editMode }: Props) {
       })();
       return;
     }
-    if (hasClip) {
-      void slot.fire().catch(() => toast("No se pudo lanzar el clip"));
-    }
+    // Same as clicking the slot in Live: a clip launches; an empty slot
+    // starts recording if the track is armed, otherwise stops the track.
+    void slot.fire().catch(() => toast(hasClip ? "No se pudo lanzar el clip" : "No se pudo usar el slot"));
   }
 
-  // Instant tap feedback (no network round-trip wait).
   const [pressed, setPressed] = useState(false);
 
-  // Visual state precedence
-  const isLit = !!clipIsRecording || isPlayingThis;
   const isRec = !!clipIsRecording;
+  const isPlaying = !isRec && (!!clipIsPlaying || isPlayingThis);
+  const isQueued = !!isTriggered && !isPlaying && !isRec;
+  const base = colorHex ?? "#5a5d66";
 
   return (
     <button
@@ -108,128 +108,99 @@ export function ClipCell({ client, track, sceneIdx, editMode }: Props) {
         if (editMode) return;
         if (slot && hasClip) void slot.stop().catch(() => toast("No se pudo parar el clip"));
       }}
-      className="w-full h-full relative overflow-hidden"
-      style={{
-        background: colorHex
-          ? `color-mix(in srgb, ${colorHex} ${hasClip ? 70 : 30}%, var(--color-surface-1))`
-          : "var(--color-surface-1)",
-        transition: "background 80ms var(--ease-instrument)",
-      }}
+      aria-label={hasClip ? `Clip ${name ?? ""}` : "Slot vacío"}
+      className="w-full h-full relative block"
+      style={{ padding: 3, background: "transparent" }}
     >
       {hasClip ? (
-        <div className="absolute inset-0 flex flex-col items-start justify-end p-1.5">
+        <span
+          className="absolute flex flex-col justify-between overflow-hidden"
+          style={{
+            inset: 3,
+            borderRadius: 6,
+            padding: "5px 7px",
+            background: `linear-gradient(180deg, color-mix(in srgb, ${base} ${isPlaying || isRec ? 100 : 78}%, white 8%) 0%, color-mix(in srgb, ${base} ${isPlaying || isRec ? 92 : 62}%, #101114) 100%)`,
+            boxShadow: pressed
+              ? "inset 0 3px 8px rgba(0,0,0,0.55)"
+              : isRec
+                ? "inset 0 0 0 2px var(--color-accent-rec), 0 0 16px color-mix(in srgb, var(--color-accent-rec) 55%, transparent)"
+                : isPlaying
+                  ? `inset 0 1px 0 rgba(255,255,255,0.45), inset 0 0 0 2px rgba(255,255,255,0.75), 0 0 18px color-mix(in srgb, ${base} 70%, transparent)`
+                  : "inset 0 1px 0 rgba(255,255,255,0.28), inset 0 -2px 0 rgba(0,0,0,0.25), 0 2px 4px rgba(0,0,0,0.5)",
+            filter: isPlaying || isRec ? "saturate(1.15) brightness(1.08)" : "saturate(0.9)",
+            transform: pressed ? "translateY(1px)" : undefined,
+            transition: "box-shadow 120ms var(--ease-instrument), filter 120ms, transform 60ms",
+          }}
+        >
+          <span className="flex items-center gap-1.5">
+            <ClipGlyph state={isRec ? "rec" : isPlaying ? "play" : isQueued ? "queued" : "idle"} />
+          </span>
           <span
             className="truncate w-full text-left"
             style={{
-              fontSize: 11,
-              fontWeight: 600,
-              color: "var(--color-text-1)",
-              textShadow: "0 1px 2px rgba(0,0,0,0.5)",
+              fontSize: 12,
+              fontWeight: 700,
+              color: "rgba(8,8,10,0.86)",
+              textShadow: "0 1px 0 rgba(255,255,255,0.2)",
+              letterSpacing: "0.005em",
             }}
           >
-            {name || "—"}
+            {name || "Sin nombre"}
           </span>
-        </div>
+          {editMode && (
+            <span
+              aria-hidden
+              className="absolute inset-0"
+              style={{ borderRadius: 6, border: "2px dashed var(--color-critical)", background: "rgba(255,77,106,0.18)" }}
+            />
+          )}
+        </span>
       ) : (
-        <div
-          className="absolute inset-0 flex items-center justify-center"
-          style={{ color: "var(--color-text-3)" }}
+        <span
+          className="absolute well flex items-center justify-center"
+          style={{
+            inset: 3,
+            borderRadius: 6,
+            background: pressed ? "#16171a" : "#0f1012",
+            boxShadow: pressed ? "inset 0 3px 8px rgba(0,0,0,0.9)" : undefined,
+          }}
         >
-          <span style={{ fontSize: 18, opacity: 0.3 }}>+</span>
-        </div>
-      )}
-
-      {/* Playing/Recording indicator bar at the top */}
-      {(isLit || isRec) && (
-        <div
-          style={{
-            position: "absolute",
-            top: 0,
-            left: 0,
-            right: 0,
-            height: 3,
-            background: isRec
-              ? "var(--color-accent-rec)"
-              : "var(--color-accent-play)",
-            boxShadow: isRec
-              ? "0 0 8px var(--color-accent-rec)"
-              : "0 0 8px var(--color-accent-play)",
-          }}
-        />
-      )}
-
-      {/* Instant pressed flash */}
-      {pressed && hasClip && (
-        <div
-          style={{
-            position: "absolute",
-            inset: 0,
-            border: "2px solid var(--color-accent-link)",
-            boxShadow:
-              "inset 0 0 12px color-mix(in srgb, var(--color-accent-link) 35%, transparent)",
-            pointerEvents: "none",
-          }}
-        />
-      )}
-
-      {/* Edit-mode affordance */}
-      {editMode && hasClip && (
-        <div
-          style={{
-            position: "absolute",
-            inset: 0,
-            border: "2px dashed var(--color-critical)",
-            pointerEvents: "none",
-          }}
-        />
-      )}
-
-      {/* Glow overlay when playing */}
-      {clipIsPlaying && (
-        <div
-          style={{
-            position: "absolute",
-            inset: 0,
-            border: "2px solid var(--color-accent-play)",
-            borderRadius: 0,
-            boxShadow:
-              "inset 0 0 12px color-mix(in srgb, var(--color-accent-play) 30%, transparent)",
-            pointerEvents: "none",
-          }}
-        />
-      )}
-
-      {/* Recording flash */}
-      {isRec && (
-        <div
-          style={{
-            position: "absolute",
-            inset: 0,
-            border: "2px solid var(--color-accent-rec)",
-            borderRadius: 0,
-            boxShadow:
-              "inset 0 0 16px color-mix(in srgb, var(--color-accent-rec) 40%, transparent)",
-            pointerEvents: "none",
-            animation: "beat-pulse 0.6s var(--ease-instrument) infinite",
-          }}
-        />
-      )}
-
-      {/* Triggered (fired, waiting to launch) */}
-      {isTriggered && !clipIsPlaying && !isRec && (
-        <div
-          style={{
-            position: "absolute",
-            top: 4,
-            right: 4,
-            width: 6,
-            height: 6,
-            borderRadius: "50%",
-            background: "var(--color-accent-cue)",
-            boxShadow: "0 0 6px var(--color-accent-cue)",
-          }}
-        />
+          <span
+            aria-hidden
+            style={{
+              width: 9,
+              height: 9,
+              borderRadius: 2,
+              border: "1.5px solid rgba(233,229,218,0.12)",
+            }}
+          />
+        </span>
       )}
     </button>
+  );
+}
+
+/** Live-style state glyph in the top-left corner of a clip. */
+function ClipGlyph({ state }: { state: "idle" | "play" | "queued" | "rec" }) {
+  if (state === "rec") {
+    return (
+      <span
+        className="rec-blink"
+        style={{ width: 9, height: 9, borderRadius: "50%", background: "#fff", boxShadow: "0 0 6px #fff" }}
+      />
+    );
+  }
+  const color = state === "idle" ? "rgba(8,8,10,0.55)" : "#ffffff";
+  return (
+    <svg
+      width="10"
+      height="10"
+      viewBox="0 0 10 10"
+      aria-hidden
+      className={state === "queued" ? "beat-dot" : undefined}
+      style={{ filter: state === "play" ? "drop-shadow(0 0 4px rgba(255,255,255,0.9))" : undefined }}
+    >
+      <path d="M1 0.5 L9.5 5 L1 9.5Z" fill={color} />
+    </svg>
   );
 }

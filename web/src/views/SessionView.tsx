@@ -4,6 +4,7 @@ import { useAbleton } from "../lib/hooks";
 import { useLiveRawList } from "../lib/list-hooks";
 import { SessionGrid } from "../components/SessionGrid";
 import { useViewport } from "../lib/viewport";
+import { EmptyPanel, Led, LedKey, ViewStrip } from "../components/hw";
 
 export function SessionView() {
   const client = useAbleton();
@@ -46,27 +47,31 @@ export function SessionView() {
   const [editMode, setEditMode] = useState(false);
 
   if (!client) {
-    return <EmptyState label="Sin conexión" />;
+    return <EmptyPanel title="Live no está conectado" hint="Abre Ableton Live con AbletonJS activo como Control Surface." />;
   }
 
   return (
     <div className="h-full flex flex-col">
       <SessionToolbar
         sceneCount={sceneCount}
+        trackCount={trackIds.length}
         editMode={editMode}
         onToggleEdit={() => setEditMode((e) => !e)}
       />
       {editMode && (
         <div
-          className="shrink-0 flex items-center justify-center label-cap"
+          className="shrink-0 flex items-center justify-center gap-2"
           style={{
-            padding: "6px 12px",
-            background: "color-mix(in srgb, var(--color-critical) 14%, var(--color-surface-1))",
-            borderBottom: "1px solid var(--color-critical)",
+            padding: "7px 12px",
+            background: "linear-gradient(180deg, rgba(255,77,106,0.18), rgba(255,77,106,0.08))",
+            borderBottom: "1px solid rgba(255,77,106,0.5)",
             color: "var(--color-critical)",
+            fontSize: 13,
+            fontWeight: 600,
           }}
         >
-          Modo borrar: toca un clip o una scene para eliminarla
+          <Led on color="critical" size={6} blink />
+          Modo borrar: toca un clip o una scene para eliminarla de Live
         </div>
       )}
       <SessionGrid
@@ -75,10 +80,10 @@ export function SessionView() {
         trackMap={trackMap}
         sceneCount={sceneCount}
         editMode={editMode}
-        cellW={isMobile ? 78 : 96}
-        cellH={isMobile ? 52 : 60}
-        trackHeaderH={isMobile ? 100 : 112}
-        sceneNameW={isMobile ? 100 : 124}
+        cellW={isMobile ? 84 : 108}
+        cellH={isMobile ? 54 : 62}
+        trackHeaderH={isMobile ? 104 : 110}
+        sceneNameW={isMobile ? 132 : 160}
       />
     </div>
   );
@@ -86,63 +91,31 @@ export function SessionView() {
 
 function SessionToolbar({
   sceneCount,
+  trackCount,
   editMode,
   onToggleEdit,
 }: {
   sceneCount: number;
+  trackCount: number;
   editMode: boolean;
   onToggleEdit: () => void;
 }) {
   return (
-    <div
-      className="h-12 shrink-0 flex items-center px-3 sm:px-5 gap-3 sm:gap-4"
-      style={{
-        background: "var(--color-surface-1)",
-        borderBottom: "1px solid var(--color-border)",
-      }}
-    >
-      <div className="flex items-center gap-2">
-        <span className="label-cap">Tracks</span>
-      </div>
-      <button
-        onClick={onToggleEdit}
-        className="tactile"
-        style={{
-          height: 32,
-          padding: "0 12px",
-          fontSize: 12,
-          fontWeight: 700,
-          color: editMode ? "var(--color-text-inverse)" : "var(--color-critical)",
-          background: editMode ? "var(--color-critical)" : "transparent",
-          border: `1.5px solid ${editMode ? "var(--color-critical)" : "var(--color-border)"}`,
-          borderRadius: 8,
-        }}
-      >
-        {editMode ? "Listo" : "Borrar"}
-      </button>
-      <div className="flex-1" />
-      <div className="flex items-center gap-2">
-        <span className="label-cap">Scenes</span>
-        <span
-          className="value-mono"
-          style={{ fontSize: 13, color: "var(--color-text-1)" }}
-        >
-          {sceneCount}
-        </span>
-      </div>
-    </div>
-  );
-}
-
-function EmptyState({ label }: { label: string }) {
-  return (
-    <div className="h-full flex items-center justify-center">
-      <span
-        className="label-cap"
-        style={{ color: "var(--color-text-3)" }}
-      >
-        {label}
+    <ViewStrip>
+      <span style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 16, letterSpacing: "0.06em" }}>Session</span>
+      <span className="value-mono" style={{ fontSize: 12, color: "var(--color-text-3)" }}>
+        {trackCount} tracks · {sceneCount} scenes
       </span>
-    </div>
+      <div className="flex-1" />
+      <LedKey
+        size="sm"
+        variant="dot"
+        color="critical"
+        active={editMode}
+        label={editMode ? "Listo" : "Borrar"}
+        onClick={onToggleEdit}
+        title="Modo borrar clips y scenes"
+      />
+    </ViewStrip>
   );
 }

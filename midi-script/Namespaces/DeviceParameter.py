@@ -27,3 +27,7 @@ class DeviceParameter(Interface):
 
     def get_state(self, ns):
         return enum_name(Live.DeviceParameter.ParameterState, ns.state)
+
+    def get_value_string(self, ns):
+        # Live's own display text for the current value ("-6.0 dB", "C", "On").
+        return str(ns)

@@ -1,375 +1,315 @@
 import { useState } from "react";
-import { useAbleton, useLiveProp } from "../lib/hooks";
-import {
-  IconArrowLeft,
-  IconArrowRight,
-  IconClick,
-  IconLoop,
-  IconPlay,
-  IconRecord,
-  IconStop,
-} from "./icons";
+import { useAbleton, useLiveProp, useSongToggle } from "../lib/hooks";
+import { IconClick, IconLoop, IconPlay, IconRecord, IconStop } from "./icons";
 import { TempoDial } from "./TempoDial";
-import { ConnectionGate } from "./ConnectionGate";
+import { LedKey, glow } from "./hw";
 import { toast } from "../lib/toast";
 
 async function safeRun(fn: () => Promise<unknown>, label: string) {
   try {
     await fn();
   } catch {
-    toast(`No se pudo: ${label}`);
+    toast(`No se pudo ${label}`);
   }
 }
 
+/**
+ * Bottom transport strip. REC is Live's main record button
+ * (song.record_mode, arrangement record); SES is the Session Record
+ * button (song.session_record). Both are booleans in Live.
+ */
 export function TransportBar() {
   const client = useAbleton();
-  const isPlaying = useLiveProp<any>(client, (c) => c.song, "is_playing");
-  const recordArm = useLiveProp<any>(client, (c) => c.song, "session_record");
-  const loop = useLiveProp<any>(client, (c) => c.song, "loop");
-  const metronome = useLiveProp<any>(client, (c) => c.song, "metronome");
-  const tempo = useLiveProp<any>(client, (c) => c.song, "tempo");
+  const isPlaying = !!useLiveProp<boolean>(client, (c) => c.song, "is_playing");
+  const tempo = useLiveProp<number>(client, (c) => c.song, "tempo");
 
-  const [pressedPlay, setPressedPlay] = useState(false);
-  const [pressedStop, setPressedStop] = useState(false);
-  const [pressedRec, setPressedRec] = useState(false);
+  const onErr = (label: string) => () => toast(`No se pudo ${label}`);
+  const [recOn, toggleRec] = useSongToggle(client, "record_mode", onErr("activar la grabación"));
+  const [sesOn, toggleSes] = useSongToggle(client, "session_record", onErr("activar Session Record"));
+  const [loopOn, toggleLoop] = useSongToggle(client, "loop", onErr("cambiar el loop"));
+  const [clickOn, toggleClick] = useSongToggle(client, "metronome", onErr("cambiar el click"));
+  const [ovrOn, toggleOvr] = useSongToggle(client, "arrangement_overdub", onErr("cambiar overdub"));
 
-  const playLabel = isPlaying ? "Pause" : "Play";
-  const isRecording = recordArm === 1 || recordArm === 2;
-
-  async function handlePlay() {
-    if (!client) return;
-    await safeRun(
-      () =>
-        isPlaying ? client.song.stopPlaying() : client.song.startPlaying(),
-      isPlaying ? "pausar" : "reproducir",
-    );
-  }
-
-  async function handleStop() {
-    if (!client) return;
-    await safeRun(() => client.song.stopPlaying(), "parar");
-  }
-
-  async function handleRec() {
-    if (!client) return;
-    await safeRun(async () => {
-      // Trigger session record by toggling the session_record property
-      const current = await client.song.get("session_record");
-      await client.song.set("session_record", current === 0 ? 1 : 0);
-    }, "grabar");
-  }
-
-  async function handleLoop() {
-    if (!client) return;
-    await safeRun(() => client.song.set("loop", !loop), "cambiar loop");
-  }
-
-  async function handleClick() {
-    if (!client) return;
-    await safeRun(
-      () => client.song.set("metronome", metronome ? 0 : 1),
-      "cambiar click",
-    );
-  }
-
-  async function handlePrevCue() {
-    if (!client) return;
-    await safeRun(() => client.song.jumpToPrevCue(), "ir a la marca anterior");
-  }
-
-  async function handleNextCue() {
-    if (!client) return;
-    await safeRun(() => client.song.jumpToNextCue(), "ir a la marca siguiente");
-  }
+  const disabled = !client;
 
   return (
-    <>
-      <footer
-        className="shrink-0 flex items-center gap-3 sm:gap-4 overflow-x-auto scroll-touch px-3 sm:px-5"
-        style={{
-          height: 96,
-          paddingBottom: "env(safe-area-inset-bottom)",
-          background: "var(--color-surface-1)",
-          borderTop: "1px solid var(--color-border)",
-          touchAction: "pan-x",
-        }}
-      >
-        {/* Cue jump */}
-        <TransportButton
-          label="◀◀"
-          onPress={handlePrevCue}
-          tone="cue"
-          size="md"
-        />
-        <TransportButton
-          label="▶▶"
-          onPress={handleNextCue}
-          tone="cue"
-          size="md"
-        />
-
-        <Divider />
-
-        {/* Stop */}
-        <Pressable
-          pressed={pressedStop}
-          onPress={() => handleStop()}
-          onPressChange={setPressedStop}
-        >
-          <BigButton color="stop" icon={<IconStop size={22} />} label="Stop" />
-        </Pressable>
-
-        {/* Play (the big one) */}
-        <Pressable
-          pressed={pressedPlay}
-          onPress={() => handlePlay()}
-          onPressChange={setPressedPlay}
-        >
-          <BigPlayButton isPlaying={!!isPlaying} label={playLabel} />
-        </Pressable>
-
-        {/* Rec */}
-        <Pressable
-          pressed={pressedRec}
-          onPress={() => handleRec()}
-          onPressChange={setPressedRec}
-        >
-          <BigButton
-            color="rec"
-            active={isRecording}
-            icon={<IconRecord size={22} />}
-            label="Rec"
+    <footer
+      className="shrink-0 flex items-center gap-2.5 xl:gap-3.5 overflow-x-auto scroll-touch px-3 sm:px-5"
+      style={{
+        height: 100,
+        paddingBottom: "env(safe-area-inset-bottom)",
+        background:
+          "linear-gradient(180deg, rgba(255,255,255,0.045) 0%, rgba(255,255,255,0) 30%), linear-gradient(180deg, #1f2125, #17181b)",
+        borderTop: "1px solid rgba(0,0,0,0.8)",
+        boxShadow: "inset 0 1px 0 rgba(255,255,255,0.07), 0 -8px 24px rgba(0,0,0,0.35)",
+        touchAction: "pan-x",
+      }}
+    >
+      {/* Cue jump */}
+      <KeyStack label="Marca">
+        <div className="flex gap-1.5">
+          <LedKey
+            size="md"
+            width={46}
+            disabled={disabled}
+            color="cue"
+            title="Marca anterior"
+            label={<Chevrons dir="left" />}
+            onClick={() => client && void safeRun(() => client.song.jumpToPrevCue(), "ir a la marca anterior")}
           />
-        </Pressable>
+          <LedKey
+            size="md"
+            width={46}
+            disabled={disabled}
+            color="cue"
+            title="Marca siguiente"
+            label={<Chevrons dir="right" />}
+            onClick={() => client && void safeRun(() => client.song.jumpToNextCue(), "ir a la marca siguiente")}
+          />
+        </div>
+      </KeyStack>
 
-        <Divider />
+      <Seam />
 
-        {/* Loop */}
-        <TransportToggle
-          active={!!loop}
-          onClick={handleLoop}
-          icon={<IconLoop size={18} />}
-          label="Loop"
+      {/* Stop · Play · Rec */}
+      <BigKey
+        label="Stop"
+        color="var(--color-accent-stop)"
+        active={false}
+        disabled={disabled}
+        onPress={() =>
+          client &&
+          void safeRun(async () => {
+            // Second press while stopped returns to the start, like Live.
+            await client.song.stopPlaying();
+          }, "parar")
+        }
+      >
+        <IconStop size={20} />
+      </BigKey>
+
+      <BigKey
+        label={isPlaying ? "Playing" : "Play"}
+        color="var(--color-accent-play)"
+        active={isPlaying}
+        disabled={disabled}
+        hero
+        onPress={() =>
+          client &&
+          void safeRun(
+            () => (isPlaying ? client.song.stopPlaying() : client.song.startPlaying()),
+            isPlaying ? "pausar" : "reproducir",
+          )
+        }
+      >
+        <span style={{ marginLeft: 3, display: "flex" }}>
+          <IconPlay size={26} />
+        </span>
+      </BigKey>
+
+      <BigKey
+        label="Rec"
+        color="var(--color-accent-rec)"
+        active={recOn}
+        blink={recOn && isPlaying}
+        disabled={disabled}
+        onPress={() => void toggleRec()}
+      >
+        <IconRecord size={22} />
+      </BigKey>
+
+      <KeyStack label="Session">
+        <LedKey
+          size="md"
+          variant="ring"
+          color="rec"
+          active={sesOn}
+          disabled={disabled}
+          title="Session Record"
+          icon={<SessionRecIcon />}
+          onClick={() => void toggleSes()}
+          width={50}
         />
+      </KeyStack>
 
-        {/* Click */}
-        <TransportToggle
-          active={!!metronome}
-          onClick={handleClick}
-          icon={<IconClick size={18} />}
-          label="Click"
-        />
+      <Seam />
 
-        <div className="flex-1 shrink-0" style={{ minWidth: 8 }} />
+      <KeyStack label="Loop">
+        <LedKey size="md" variant="ring" color="cue" active={loopOn} disabled={disabled} icon={<IconLoop size={18} />} onClick={() => void toggleLoop()} width={50} />
+      </KeyStack>
+      <KeyStack label="Click">
+        <LedKey size="md" variant="ring" color="cue" active={clickOn} disabled={disabled} icon={<IconClick size={18} />} onClick={() => void toggleClick()} width={50} />
+      </KeyStack>
+      <KeyStack label="OVR" className="hidden lg:flex">
+        <LedKey size="md" variant="ring" color="macro" active={ovrOn} disabled={disabled} label="+" onClick={() => void toggleOvr()} width={50} style={{ fontSize: 20 }} />
+      </KeyStack>
 
-        {/* Tempo dial */}
-        {client && tempo !== undefined && (
-          <div className="shrink-0">
-            <TempoDial
-              tempo={tempo}
-              onChange={(t) => {
-                void client.song
-                  .set("tempo", t)
-                  .catch(() => toast("No se pudo cambiar el tempo"));
-              }}
+      <div className="flex-1 shrink-0" style={{ minWidth: 8 }} />
+
+      {client && tempo !== undefined && (
+        <div className="shrink-0 flex items-center gap-2">
+          <KeyStack label="Tempo" className="hidden lg:flex">
+            <LedKey
+              size="md"
+              width={50}
+              color="cue"
+              label="Tap"
+              onClick={() => void safeRun(() => client.song.tapTempo(), "marcar el tempo")}
             />
-          </div>
-        )}
-      </footer>
-    </>
+          </KeyStack>
+          <TempoDial
+            tempo={tempo}
+            onChange={(t) => {
+              void client.song.set("tempo", t).catch(() => toast("No se pudo cambiar el tempo"));
+            }}
+          />
+        </div>
+      )}
+    </footer>
   );
 }
 
-function Divider() {
+function Seam() {
   return (
     <span
-      className="w-px h-12 shrink-0"
-      style={{ background: "var(--color-border)" }}
+      aria-hidden
+      className="shrink-0"
+      style={{
+        width: 2,
+        height: 56,
+        borderLeft: "1px solid rgba(0,0,0,0.7)",
+        borderRight: "1px solid rgba(255,255,255,0.05)",
+      }}
     />
   );
 }
 
-interface PressableProps {
-  pressed: boolean;
-  onPress: () => void;
-  onPressChange: (p: boolean) => void;
+function KeyStack({
+  label,
+  children,
+  className,
+}: {
+  label: string;
   children: React.ReactNode;
-}
-
-function Pressable({ pressed, onPress, onPressChange, children }: PressableProps) {
+  className?: string;
+}) {
   return (
-    <button
-      onPointerDown={() => onPressChange(true)}
-      onPointerUp={() => onPressChange(false)}
-      onPointerLeave={() => onPressChange(false)}
-      onPointerCancel={() => onPressChange(false)}
-      onClick={onPress}
-      className={`shrink-0 ${pressed ? "tactile-active" : ""}`}
-      style={{ touchAction: "manipulation" }}
-    >
+    <div className={`shrink-0 flex flex-col items-center gap-1.5 ${className ?? ""}`}>
       {children}
-    </button>
-  );
-}
-
-function BigPlayButton({ isPlaying, label }: { isPlaying: boolean; label: string }) {
-  const color = isPlaying ? "var(--color-accent-play)" : "var(--color-text-1)";
-  return (
-    <div className="flex flex-col items-center gap-1">
-      <div
-        className="rounded-full flex items-center justify-center"
-        style={{
-          width: 64,
-          height: 64,
-          background: isPlaying
-            ? "color-mix(in srgb, var(--color-accent-play) 18%, var(--color-surface-2))"
-            : "var(--color-surface-3)",
-          border: `2px solid ${isPlaying ? "var(--color-accent-play)" : "var(--color-border-strong)"}`,
-          boxShadow: isPlaying
-            ? `0 0 24px color-mix(in srgb, var(--color-accent-play) 35%, transparent),
-               inset 0 0 12px color-mix(in srgb, var(--color-accent-play) 25%, transparent)`
-            : "var(--shadow-inset-soft)",
-          transition:
-            "background 120ms var(--ease-instrument), border-color 120ms var(--ease-instrument), box-shadow 240ms var(--ease-instrument)",
-        }}
-      >
-        {isPlaying ? (
-          <span
-            className="flex items-center justify-center"
-            style={{ color }}
-          >
-            <IconStop size={26} />
-          </span>
-        ) : (
-          <span
-            className="flex items-center justify-center"
-            style={{ color, marginLeft: 4 }}
-          >
-            <IconPlay size={26} />
-          </span>
-        )}
-      </div>
-      <span
-        className="label-cap"
-        style={{
-          color: isPlaying ? "var(--color-accent-play)" : "var(--color-text-2)",
-        }}
-      >
+      <span className="label-cap" style={{ fontSize: 10 }}>
         {label}
       </span>
     </div>
   );
 }
 
-function BigButton({
+/** Round transport key with an LED ring around it. */
+function BigKey({
+  label,
   color,
   active,
-  icon,
-  label,
-}: {
-  color: "stop" | "rec";
-  active?: boolean;
-  icon: React.ReactNode;
-  label: string;
-}) {
-  const colorVar =
-    color === "stop"
-      ? "var(--color-accent-stop)"
-      : "var(--color-accent-rec)";
-  return (
-    <div className="flex flex-col items-center gap-1">
-      <div
-        className="rounded-full flex items-center justify-center"
-        style={{
-          width: 56,
-          height: 56,
-          background: active
-            ? `color-mix(in srgb, ${colorVar} 18%, var(--color-surface-2))`
-            : "var(--color-surface-3)",
-          border: `1.5px solid ${active ? colorVar : "var(--color-border-strong)"}`,
-          color: active ? colorVar : "var(--color-text-2)",
-          boxShadow: active
-            ? `0 0 18px color-mix(in srgb, ${colorVar} 30%, transparent)`
-            : "var(--shadow-inset-soft)",
-          transition: "all 120ms var(--ease-instrument)",
-        }}
-      >
-        {icon}
-      </div>
-      <span className="label-cap" style={{ color: "var(--color-text-2)" }}>
-        {label}
-      </span>
-    </div>
-  );
-}
-
-function TransportButton({
-  label,
+  blink,
+  hero,
+  disabled,
   onPress,
-  tone,
-  size,
+  children,
 }: {
   label: string;
+  color: string;
+  active: boolean;
+  blink?: boolean;
+  hero?: boolean;
+  disabled?: boolean;
   onPress: () => void;
-  tone: "cue" | "default";
-  size: "sm" | "md";
+  children: React.ReactNode;
 }) {
-  const colorVar =
-    tone === "cue" ? "var(--color-accent-cue)" : "var(--color-text-1)";
+  const [down, setDown] = useState(false);
+  const d = hero ? 66 : 56;
   return (
     <button
+      type="button"
+      aria-pressed={active}
+      aria-label={label}
+      disabled={disabled}
+      onPointerDown={() => setDown(true)}
+      onPointerUp={() => setDown(false)}
+      onPointerLeave={() => setDown(false)}
+      onPointerCancel={() => setDown(false)}
       onClick={onPress}
-      className="rounded-md tactile flex items-center justify-center shrink-0"
-      style={{
-        width: size === "md" ? 48 : 40,
-        height: size === "md" ? 40 : 36,
-        color: colorVar,
-        fontFamily: "var(--font-mono)",
-        fontWeight: 600,
-      }}
+      className="shrink-0 flex flex-col items-center gap-1.5"
+      style={{ opacity: disabled ? 0.45 : 1 }}
     >
-      {label}
+      {/* LED ring (bezel) */}
+      <span
+        className={blink ? "rec-blink" : undefined}
+        style={{
+          width: d + 8,
+          height: d + 8,
+          borderRadius: "50%",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          background: active
+            ? `conic-gradient(from 210deg, ${color}, color-mix(in srgb, ${color} 60%, black), ${color}, color-mix(in srgb, ${color} 60%, black), ${color})`
+            : "linear-gradient(180deg, #0b0c0e, #2a2c31)",
+          boxShadow: active ? glow(color, 1.6) : "inset 0 1px 2px rgba(0,0,0,0.9), 0 1px 0 rgba(255,255,255,0.06)",
+          transition: "box-shadow 140ms var(--ease-instrument), background 140ms",
+        }}
+      >
+        {/* rubber cap */}
+        <span
+          style={{
+            width: d,
+            height: d,
+            borderRadius: "50%",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            color: active ? color : "var(--color-text-2)",
+            background:
+              "radial-gradient(circle at 50% 30%, #42454c 0%, #2b2d33 55%, #1d1e22 100%)",
+            boxShadow: down
+              ? "inset 0 3px 8px rgba(0,0,0,0.8)"
+              : "inset 0 1px 0 rgba(255,255,255,0.12), inset 0 -3px 6px rgba(0,0,0,0.45), 0 3px 6px rgba(0,0,0,0.6)",
+            transform: down ? "scale(0.97)" : undefined,
+            filter: active ? `drop-shadow(0 0 6px ${color})` : undefined,
+            transition: "transform 60ms, box-shadow 80ms",
+          }}
+        >
+          {children}
+        </span>
+      </span>
+      <span className="label-cap" style={{ fontSize: 10, color: active ? color : undefined }}>
+        {label}
+      </span>
     </button>
   );
 }
 
-function TransportToggle({
-  active,
-  onClick,
-  icon,
-  label,
-}: {
-  active: boolean;
-  onClick: () => void;
-  icon: React.ReactNode;
-  label: string;
-}) {
+function Chevrons({ dir }: { dir: "left" | "right" }) {
   return (
-    <button
-      onClick={onClick}
-      className="flex flex-col items-center gap-1 tactile shrink-0"
-      style={{
-        padding: "6px 10px",
-      }}
-    >
-      <span
-        className="flex items-center justify-center"
-        style={{
-          width: 28,
-          height: 28,
-          color: active ? "var(--color-accent-cue)" : "var(--color-text-2)",
-        }}
-      >
-        {icon}
-      </span>
-      <span
-        className="label-cap"
-        style={{
-          color: active ? "var(--color-accent-cue)" : "var(--color-text-3)",
-        }}
-      >
-        {label}
-      </span>
-    </button>
+    <svg width="18" height="14" viewBox="0 0 18 14" fill="currentColor" aria-hidden>
+      {dir === "left" ? (
+        <>
+          <path d="M8 1 L1 7 L8 13 Z" />
+          <path d="M17 1 L10 7 L17 13 Z" />
+        </>
+      ) : (
+        <>
+          <path d="M1 1 L8 7 L1 13 Z" />
+          <path d="M10 1 L17 7 L10 13 Z" />
+        </>
+      )}
+    </svg>
+  );
+}
+
+/** Live's Session Record glyph: a dot inside a square. */
+function SessionRecIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden>
+      <rect x="2.5" y="2.5" width="15" height="15" rx="2" stroke="currentColor" strokeWidth="1.6" />
+      <circle cx="10" cy="10" r="3.6" fill="currentColor" />
+    </svg>
   );
 }

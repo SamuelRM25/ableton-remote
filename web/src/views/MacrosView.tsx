@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
 import { useAbleton } from "../lib/hooks";
-import { useLiveChildProp } from "../lib/list-hooks";
+import { useLiveChildProp, useParamDisplay } from "../lib/list-hooks";
+import { useOptimistic } from "../lib/hooks";
+import { EmptyPanel, LedKey, ViewStrip } from "../components/hw";
+import { toast } from "../lib/toast";
 import { Knob } from "../components/Knob";
 import { DevicePicker } from "../components/DevicePicker";
 
@@ -46,105 +49,123 @@ export function MacrosView() {
   const deviceName = useLiveChildProp<string>(device, "name");
   const parameters = useLiveChildProp<any[]>(device, "parameters");
 
-  if (!client) return <Empty>Sin conexión</Empty>;
+  if (!client) {
+    return <EmptyPanel title="Live no está conectado" hint="Abre Ableton Live con AbletonJS activo como Control Surface." />;
+  }
+
+  // Parameter 0 is always "Device On"; the macros start at index 1.
+  const power = parameters?.[0];
+  const macros = (parameters ?? []).slice(1, 17);
 
   return (
     <div className="h-full flex flex-col">
-      <div
-        className="h-14 shrink-0 flex items-center px-5 gap-4"
-        style={{
-          background: "var(--color-surface-1)",
-          borderBottom: "1px solid var(--color-border)",
-        }}
-      >
-        <div className="flex flex-col">
-          <span
-            className="label-cap"
-            style={{ color: "var(--color-accent-macro)" }}
-          >
-            Macro knobs
-          </span>
-          <span
-            className="truncate"
-            style={{
-              fontSize: 16,
-              fontWeight: 600,
-              color: "var(--color-text-1)",
-            }}
-          >
-            {deviceName ?? "—"}
+      <ViewStrip>
+        <div className="flex flex-col min-w-0">
+          <span className="label-cap" style={{ fontSize: 10, color: "var(--color-accent-macro)" }}>Macros</span>
+          <span className="truncate" style={{ fontFamily: "var(--font-display)", fontSize: 19, fontWeight: 700, letterSpacing: "0.02em" }}>
+            {device ? deviceName ?? "—" : "Ningún device"}
           </span>
         </div>
         <div className="flex-1" />
-      </div>
-      {client && <DevicePicker client={client} />}
-      <div
-        className="flex-1 overflow-auto p-4 sm:p-6"
-        style={{ background: "var(--color-bg)" }}
-      >
+        {power && <PowerKey param={power} />}
+      </ViewStrip>
+      <DevicePicker client={client} />
+      <div className="flex-1 overflow-auto scroll-touch p-3 sm:p-5">
         {!device ? (
-          <Empty>Elige un track y un device arriba para ver sus macros</Empty>
-        ) : parameters && parameters.length > 0 ? (
+          <EmptyPanel title="Elige un device" hint="Toca un track y luego uno de sus devices en la barra de arriba." />
+        ) : macros.length > 0 ? (
           <div
-            className="grid gap-5"
+            className="panel grid mx-auto"
             style={{
-              gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
+              gridTemplateColumns: "repeat(auto-fill, minmax(118px, 1fr))",
+              gap: 6,
+              padding: 14,
+              maxWidth: 1100,
             }}
           >
-            {parameters.slice(0, 16).map((p: any, i: number) => (
+            {macros.map((p: any, i: number) => (
               <MacroCell key={p.raw?.id ?? i} param={p} index={i} />
             ))}
           </div>
         ) : (
-          <Empty>Este device no tiene parámetros</Empty>
+          <EmptyPanel title="Este device no tiene parámetros" />
         )}
       </div>
     </div>
   );
 }
 
-function MacroCell({ param, index }: { param: any; index: number }) {
+function PowerKey({ param }: { param: any }) {
   const value = useLiveChildProp<number>(param, "value");
+  const on = (value ?? 0) > 0.5;
+  return (
+    <LedKey
+      size="md"
+      variant="dot"
+      color="play"
+      active={on}
+      label={on ? "On" : "Off"}
+      onClick={() => void param.set("value", on ? 0 : 1).catch(() => toast("No se pudo cambiar el device"))}
+      title="Activar o desactivar el device"
+    />
+  );
+}
+
+function MacroCell({ param, index }: { param: any; index: number }) {
+  const live = useLiveChildProp<number>(param, "value");
   const min = useLiveChildProp<number>(param, "min");
   const max = useLiveChildProp<number>(param, "max");
   const name = useLiveChildProp<string>(param, "name");
-  const valueStr = useLiveChildProp<string>(param, "value_string");
+  const [value, setValue] = useOptimistic<number>(live, (v) => {
+    void param.set("value", v).catch(() => {});
+  });
+  const display = useParamDisplay(param, live);
+  const lo = min ?? 0;
+  const hi = max ?? 1;
 
   return (
-    <div className="panel flex flex-col items-center" style={{ padding: 16 }}>
-      <span className="label-cap" style={{ color: "var(--color-accent-macro)" }}>
-        {String(index + 1).padStart(2, "0")}
+    <div
+      className="flex flex-col items-center"
+      style={{
+        padding: "14px 8px 12px",
+        borderRadius: 8,
+        background: "linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0.12))",
+        boxShadow: "inset 0 0 0 1px rgba(0,0,0,0.35)",
+      }}
+    >
+      <span
+        className="truncate w-full text-center"
+        style={{ fontFamily: "var(--font-display)", fontSize: 14, fontWeight: 600, letterSpacing: "0.03em", color: "var(--color-text-1)" }}
+        title={name}
+      >
+        {name ?? `Macro ${index + 1}`}
       </span>
-      <div className="mt-2">
+      <div style={{ marginTop: 10 }}>
         <Knob
-          value={value ?? 0}
-          min={min ?? 0}
-          max={max ?? 1}
-          onChange={(v) => {
-            void param.set("value", v).catch(() => {});
-          }}
-          size={64}
+          value={value ?? lo}
+          min={lo}
+          max={hi}
+          onChange={setValue}
+          size={78}
+          bare
           color="var(--color-accent-macro)"
+          ariaLabel={name}
         />
       </div>
       <span
-        className="value-mono mt-2"
+        className="vfd value-mono"
         style={{
+          marginTop: 10,
+          padding: "3px 9px",
           fontSize: 12,
-          fontWeight: 600,
-          color: "var(--color-text-1)",
+          fontWeight: 700,
+          color: "var(--color-vfd-ink)",
+          textShadow: "0 0 5px rgba(255,178,62,0.45)",
+          minWidth: 64,
+          textAlign: "center",
         }}
       >
-        {valueStr ?? formatValue(value ?? 0, min ?? 0, max ?? 1)}
-      </span>
-      <span
-        className="truncate w-full text-center mt-1"
-        style={{
-          fontSize: 12,
-          color: "var(--color-text-2)",
-        }}
-      >
-        {name ?? "—"}
+        {display ?? formatValue(value ?? lo, lo, hi)}
       </span>
     </div>
   );
@@ -152,16 +173,5 @@ function MacroCell({ param, index }: { param: any; index: number }) {
 
 function formatValue(v: number, min: number, max: number): string {
   if (max === min) return "—";
-  const fraction = (v - min) / (max - min);
-  return `${Math.round(fraction * 100)}%`;
-}
-
-function Empty({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="h-full flex items-center justify-center">
-      <span className="label-cap" style={{ color: "var(--color-text-3)" }}>
-        {children}
-      </span>
-    </div>
-  );
+  return `${Math.round(((v - min) / (max - min)) * 100)}%`;
 }

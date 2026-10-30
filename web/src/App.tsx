@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { abletonStore } from "./lib/ableton-store";
 import { Toasts } from "./lib/toast";
 import { useViewport } from "./lib/viewport";
+import { useConnectionStatus } from "./lib/hooks";
 import { SideRail, type ViewId } from "./components/SideRail";
 import { TopBar } from "./components/TopBar";
 import { TransportBar } from "./components/TransportBar";
@@ -34,6 +35,12 @@ export function App() {
   const [view, setView] = useState<ViewId>("session");
   const [gateDismissed, setGateDismissed] = useState(false);
   const { isMobile } = useViewport();
+  const status = useConnectionStatus();
+
+  // Once connected, a later failure should show the connection form again.
+  useEffect(() => {
+    if (status.kind === "connected") setGateDismissed(false);
+  }, [status.kind]);
 
   useEffect(() => {
     void abletonStore.getState().connect();

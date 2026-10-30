@@ -4,6 +4,7 @@ import { useAbleton, useLiveProp } from "../lib/hooks";
 import { useLiveRawList } from "../lib/list-hooks";
 import { toast } from "../lib/toast";
 import { jumpToTime, playFromTime, loopRange } from "../lib/cue-jump";
+import { beatsToBarLabel } from "../lib/clock";
 import {
   IconBookmark,
   IconCheck,
@@ -464,11 +465,11 @@ export function SetlistView() {
         setCountIn(null);
         void (async () => {
           try {
-            if (prevClick === 0) await client.song.set("metronome", 1);
+            if (!prevClick) await client.song.set("metronome", true as any);
             await playFromTime(client, item.time);
-            if (prevClick === 0) {
+            if (!prevClick) {
               window.setTimeout(() => {
-                void client.song.set("metronome", 0).catch(() => {});
+                void client.song.set("metronome", false as any).catch(() => {});
               }, beatMs * beats);
             }
           } catch {
@@ -756,8 +757,15 @@ export function SetlistView() {
       toast("La canción no tiene marcas");
       return;
     }
+    // Beats. The loop ends where the next song (or next cue) starts;
+    // for the last song, four bars after its last cue.
     const start = Math.min(...times);
-    const end = Math.max(...times) + 8;
+    const last = Math.max(...times);
+    const after = state.items
+      .map((i) => i.time)
+      .filter((t) => t > last + 0.01)
+      .sort((a, b) => a - b)[0];
+    const end = after ?? last + 16;
     try {
       await loopRange(client, start, end);
       setLoopSongId(songId);
@@ -1507,7 +1515,7 @@ function CueRow({
         className="value-mono shrink-0 hidden sm:inline"
         style={{ fontSize: 11, color: "var(--color-text-3)" }}
       >
-        {item.time.toFixed(1)}s
+        {beatsToBarLabel(item.time)}
       </span>
       {songs.length > 0 && !editing && (
         <select

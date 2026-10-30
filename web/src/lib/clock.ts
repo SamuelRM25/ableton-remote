@@ -3,7 +3,9 @@ import type { Ableton } from "ableton-js";
 import { useLiveProp } from "./hooks";
 
 export interface SongClock {
-  /** Interpolated arrangement time in seconds. */
+  /** Interpolated arrangement position in BEATS (Live's native unit). */
+  beats: number;
+  /** Same position as wall-clock seconds at the current tempo. */
   timeSec: number;
   bar: number;
   beat: number;
@@ -25,6 +27,8 @@ export interface SongClock {
  * - current_song_time is polled (250 ms) and INTERPOLATED between polls
  *   with performance.now(), advancing only while playing. This keeps the
  *   bar.beat.sixteenth counter glued to Live instead of stepping at 4 Hz.
+ * - Units: Live's current_song_time, cue_point.time, jump_by and
+ *   loop_start are all in BEATS (quarter notes), not seconds.
  * - Bars honor the live time signature (beatsPerBar = numerator),
  *   not a hardcoded 4/4.
  */
@@ -73,8 +77,8 @@ export function useSongClock(client: Ableton | null): SongClock {
     const loop = () => {
       const { tempo: tp, sigNum: sn, isPlaying: pl } = liveRef.current;
       const { t, at } = baseRef.current;
-      const now = pl && at > 0 ? t + (performance.now() - at) / 1000 : t;
-      const key = `${formatClock(now, tp, sn)}:${Math.floor(now * 30)}`;
+      const now = pl && at > 0 ? t + ((performance.now() - at) / 1000) * (tp / 60) : t;
+      const key = `${formatClock(now, tp, sn)}:${Math.floor(now * 8)}`;
       if (key !== lastDisplayRef.current) {
         lastDisplayRef.current = key;
         setTick((n) => n + 1);
@@ -87,21 +91,21 @@ export function useSongClock(client: Ableton | null): SongClock {
 
   const { tempo: tp, sigNum: sn, sigDen: sd, isPlaying: pl } = liveRef.current;
   const { t, at } = baseRef.current;
-  const now = pl && at > 0 ? t + (performance.now() - at) / 1000 : t;
+  const now = pl && at > 0 ? t + ((performance.now() - at) / 1000) * (tp / 60) : t;
   return buildClock(now, tp, sn, sd, pl);
 }
 
 function formatClock(
-  timeSec: number,
+  beats: number,
   tempo: number,
   beatsPerBar: number,
   beatUnit = 4,
 ): string {
-  return buildClock(timeSec, tempo, beatsPerBar, beatUnit, true).barsDisplay;
+  return buildClock(beats, tempo, beatsPerBar, beatUnit, true).barsDisplay;
 }
 
 function buildClock(
-  timeSec: number,
+  beatsRaw: number,
   tempo: number,
   beatsPerBarRaw: number,
   beatUnitRaw: number,
@@ -110,12 +114,17 @@ function buildClock(
   const safeTempo = tempo > 0 ? tempo : 120;
   const bpb = beatsPerBarRaw > 0 ? Math.floor(beatsPerBarRaw) : 4;
   const unit = beatUnitRaw > 0 ? Math.floor(beatUnitRaw) : 4;
-  const totalBeats = (Math.max(0, timeSec) * safeTempo) / 60;
+  // Live's beat = quarter note. In x/8 the bar holds numerator eighths,
+  // so convert quarter-note beats to signature beats first.
+  const totalQuarter = Math.max(0, beatsRaw);
+  const totalBeats = (totalQuarter * unit) / 4;
   const bar = Math.floor(totalBeats / bpb) + 1;
   const beat = Math.floor(mod(totalBeats, bpb)) + 1;
-  const sixteenth = Math.floor(mod(totalBeats * 4, 4)) + 1;
+  const perBeat = Math.max(1, Math.round(16 / unit));
+  const sixteenth = Math.floor(mod(totalBeats * perBeat, perBeat)) + 1;
   return {
-    timeSec: Math.max(0, timeSec),
+    beats: totalQuarter,
+    timeSec: (totalQuarter * 60) / safeTempo,
     bar,
     beat,
     sixteenth,
@@ -132,7 +141,15 @@ function mod(n: number, m: number): number {
   return ((n % m) + m) % m;
 }
 
-/** m:ss.cs wall-time formatting for an arrangement time in seconds. */
+/** Bar.beat label (e.g. "17.1") for a position in Live beats. */
+export function beatsToBarLabel(beats: number, beatsPerBar = 4, beatUnit = 4): string {
+  const sigBeats = (Math.max(0, beats) * beatUnit) / 4;
+  const bar = Math.floor(sigBeats / beatsPerBar) + 1;
+  const beat = Math.floor(mod(sigBeats, beatsPerBar)) + 1;
+  return `${bar}.${beat}`;
+}
+
+/** m:ss.cs wall-time formatting for a duration in seconds. */
 export function formatTimeMs(totalSeconds: number): string {
   const ms = Math.max(0, totalSeconds * 1000);
   const totalSec = Math.floor(ms / 1000);

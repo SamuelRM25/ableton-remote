@@ -2,7 +2,9 @@
 
 Control total de Ableton Live 12 desde un iPad por WiFi local. Construido para uso en escenario: latencia sub-frame, multitouch, setlists, lyrics, macros, mixer y todo el Live Object Model expuesto.
 
-> **Estado actual**: build limpio, dev server arranca, todas las vistas implementadas. Falta probar end-to-end con Live abierto.
+> **Estado actual**: build con chequeo de tipos real, todas las vistas implementadas. Probado end-to-end contra un simulador de Live que ejecuta este mismo MIDI script; falta la prueba final con Live 12 real.
+>
+> **Rediseño "hardware de estudio" (oct 2026)**: chasis grafito, teclas de goma con LED, display VFD ámbar con dígitos de 7 segmentos, knobs con anillo LED, faders de recorrido largo y medidores LED segmentados. Fuentes incluidas en el build (Barlow, Barlow Condensed, JetBrains Mono, DSEG7), así que se ve igual sin internet. Arreglos: REC (ahora es el Rec principal de Live, `record_mode`, y Session Record va aparte), colores de clips/tracks, cuadrícula de Session desalineada, unidades de tiempo (Live usa beats, no segundos), click/overdub/back-to-arranger con booleanos, ruteo I/O con la API de Live 12, lectura del valor real de cada parámetro (`value_string`), reconexión automática si se cae el WiFi.
 
 ## Arquitectura
 

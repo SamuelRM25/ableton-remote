@@ -31,6 +31,8 @@ const KNOWN_NON_LISTENABLE = new Set<string>([
   "mixer-device:volume",
   "mixer-device:panning",
   "mixer-device:cue_volume",
+  "device-parameter:value_string",
+  "track:can_be_armed",
 ]);
 
 /** Session-learned non-listenable props (shared across all hook users). */
@@ -162,4 +164,44 @@ export function useOptimistic<T>(
       // ignore — Live will confirm via poll or the error surfaces elsewhere
     }
   }];
+}
+
+/**
+ * A boolean Song property (record_mode, session_record, loop, metronome,
+ * overdub, punch_in…) as [isOn, toggle].
+ *
+ * Live returns these as JSON booleans, so the value is normalised with
+ * `!!` and always written back as a real boolean. The toggle is
+ * optimistic: the key lights instantly, the listener confirms it.
+ */
+export function useSongToggle(
+  client: Ableton | null,
+  prop: string,
+  onError?: (err: unknown) => void,
+): [boolean, () => Promise<void>, boolean | undefined] {
+  const live = useLiveProp<boolean | number>(client, (c) => c.song, prop);
+  const [override, setOverride] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    setOverride(null);
+  }, [live]);
+
+  const isOn = override ?? !!live;
+
+  async function toggle() {
+    if (!client) return;
+    const next = !isOn;
+    setOverride(next);
+    // If Live never echoes the change (rejected silently), fall back to
+    // the real value instead of showing a key that lies.
+    window.setTimeout(() => setOverride(null), 1500);
+    try {
+      await client.song.set(prop as any, next as any);
+    } catch (err) {
+      setOverride(null);
+      onError?.(err);
+    }
+  }
+
+  return [isOn, toggle, live === undefined ? undefined : !!live];
 }

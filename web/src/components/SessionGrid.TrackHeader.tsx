@@ -5,6 +5,7 @@ import { toast } from "../lib/toast";
 import { colorToHex } from "../lib/color";
 import { Fader } from "./Fader";
 import { IconStop } from "./icons";
+import { LedKey, Meter } from "./hw";
 
 async function safeSet(track: any, prop: string, value: unknown, label: string) {
   try {
@@ -41,190 +42,71 @@ export function TrackHeader({ client, track, index }: Props) {
 
   async function handleStop() {
     try {
-      const slots = await track.get("clip_slots");
-      const idx = playingSlot ?? -1;
-      if (idx >= 0 && slots[idx]) {
-        await slots[idx].stop();
-      }
+      await track.stopAllClips();
     } catch {
-      // ignore
+      toast("No se pudo parar el track");
     }
   }
 
   return (
-    <div
-      className="h-full flex flex-col"
-      style={{ borderLeft: `3px solid ${colorHex}` }}
-    >
-      <div className="flex items-center gap-1.5 px-2.5 pt-1.5">
-        <span
-          className="value-mono"
-          style={{
-            fontSize: 10,
-            color: "var(--color-text-3)",
-            width: 18,
-          }}
-        >
-          {String(index + 1).padStart(2, "0")}
+    <div className="h-full flex flex-col" style={{ padding: "0 6px 6px" }}>
+      {/* colour cap */}
+      <div
+        aria-hidden
+        style={{
+          height: 4,
+          margin: "0 -6px",
+          background: colorHex,
+          boxShadow: `0 0 10px color-mix(in srgb, ${colorHex} 60%, transparent)`,
+        }}
+      />
+      <div className="flex items-center gap-1.5" style={{ marginTop: 6 }}>
+        <span className="value-mono" style={{ fontSize: 10, color: "var(--color-text-3)" }}>
+          {index + 1}
         </span>
         <span
           className="truncate"
-          style={{
-            fontSize: 13,
-            fontWeight: 600,
-            color: "var(--color-text-1)",
-            letterSpacing: "-0.005em",
-          }}
+          style={{ fontSize: 13, fontWeight: 700, color: "var(--color-text-1)", letterSpacing: "0.005em" }}
+          title={name}
         >
           {name ?? "—"}
         </span>
       </div>
 
-      <div className="flex items-center gap-1 px-2 mt-1 flex-wrap" style={{ rowGap: 4 }}>
-        <MuteButton
-          active={!!mute}
-          onClick={() => void safeSet(track, "mute", !mute, "mute")}
-        />
-        <SoloButton
-          active={!!solo}
-          onClick={() => void safeSet(track, "solo", !solo, "solo")}
-        />
+      <div className="flex items-center gap-1" style={{ marginTop: 6 }}>
+        <LedKey size="xs" label="M" color="stop" active={!!mute} onClick={() => void safeSet(track, "mute", !mute, "mute")} title="Mute" />
+        <LedKey size="xs" label="S" color="solo" active={!!solo} onClick={() => void safeSet(track, "solo", !solo, "solo")} title="Solo" />
         {canArm !== false && (
-          <ArmButton
-            active={!!arm}
-            onClick={() => void safeSet(track, "arm", !arm, "arm")}
-          />
+          <LedKey size="xs" label="R" color="rec" active={!!arm} onClick={() => void safeSet(track, "arm", !arm, "arm")} title="Armar" />
         )}
         <div className="flex-1" />
-        <button
+        <LedKey
+          size="xs"
+          color="stop"
+          variant="ring"
+          active={(playingSlot ?? -1) >= 0}
+          title="Parar el clip de este track"
+          icon={<IconStop size={10} />}
           onClick={() => void handleStop()}
-          className="tactile shrink-0"
-          style={{
-            width: 22,
-            height: 20,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            color: "var(--color-text-3)",
-            borderRadius: 6,
-          }}
-        >
-          <IconStop size={12} />
-        </button>
+          style={{ padding: 0 }}
+        />
       </div>
 
-      <div className="flex items-center gap-2 px-2.5 mt-1.5 flex-1 min-h-0">
+      <div className="flex items-stretch gap-1.5 flex-1 min-h-0" style={{ marginTop: 6 }}>
         <Fader
           value={volume ?? 0.85}
           onChange={(v) => setVolume(v)}
-          vertical
-          height={36}
-          width={16}
+          vertical={false}
+          height={20}
+          width="100%"
+          defaultValue={0.85}
+          ariaLabel={`Volumen ${name ?? ""}`}
         />
-        <div
-          className="flex-1 flex items-end gap-0.5"
-          style={{ height: 36 }}
-        >
-          <MeterBar level={meterL ?? 0} />
-          <MeterBar level={meterR ?? 0} />
+        <div className="flex gap-px" style={{ height: 20 }}>
+          <Meter level={meterL ?? 0} thickness={4} segments={8} />
+          <Meter level={meterR ?? 0} thickness={4} segments={8} />
         </div>
       </div>
     </div>
-  );
-}
-
-function MeterBar({ level }: { level: number }) {
-  const fraction = Math.min(1, Math.max(0, level));
-  const color =
-    fraction > 0.85
-      ? "var(--color-accent-rec)"
-      : fraction > 0.6
-        ? "var(--color-accent-cue)"
-        : "var(--color-accent-play)";
-  return (
-    <div
-      className="flex-1 rounded-sm overflow-hidden"
-      style={{
-        background: "var(--color-surface-3)",
-        height: "100%",
-        position: "relative",
-      }}
-    >
-      <div
-        style={{
-          position: "absolute",
-          bottom: 0,
-          left: 0,
-          right: 0,
-          height: `${fraction * 100}%`,
-          background: color,
-          transition: "height 60ms linear",
-        }}
-      />
-    </div>
-  );
-}
-
-function MuteButton({ active, onClick }: { active: boolean; onClick: () => void }) {
-  return (
-    <TrackButton
-      label="M"
-      active={active}
-      activeColor="var(--color-accent-stop)"
-      onClick={onClick}
-    />
-  );
-}
-
-function SoloButton({ active, onClick }: { active: boolean; onClick: () => void }) {
-  return (
-    <TrackButton
-      label="S"
-      active={active}
-      activeColor="var(--color-accent-cue)"
-      onClick={onClick}
-    />
-  );
-}
-
-function ArmButton({ active, onClick }: { active: boolean; onClick: () => void }) {
-  return (
-    <TrackButton
-      label="R"
-      active={active}
-      activeColor="var(--color-accent-rec)"
-      onClick={onClick}
-    />
-  );
-}
-
-function TrackButton({
-  label,
-  active,
-  activeColor,
-  onClick,
-}: {
-  label: string;
-  active: boolean;
-  activeColor: string;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className="tactile shrink-0"
-      style={{
-        width: 24,
-        height: 20,
-        fontFamily: "var(--font-mono)",
-        fontSize: 11,
-        fontWeight: 700,
-        color: active ? "var(--color-text-inverse)" : "var(--color-text-2)",
-        background: active ? activeColor : undefined,
-        borderRadius: 5,
-      }}
-    >
-      {label}
-    </button>
   );
 }

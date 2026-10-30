@@ -5,143 +5,114 @@ interface Props {
   onChange: (next: number) => void;
   min?: number;
   max?: number;
+  /** "compact" for the transport strip, "large" for the Transport view. */
+  size?: "compact" | "large";
 }
 
-const SIZE = 64;
-const STROKE = 3;
-
 /**
- * A touch-drag knob for BPM. Drag vertically (or anywhere on the dial) to
- * change the value. Coarse / fine drag based on velocity.
+ * Tempo encoder: drag up/down anywhere on the display. Slow drags move in
+ * 0.1 BPM steps, fast drags in whole BPM. Double-tap rounds to the
+ * nearest integer.
  */
-export function TempoDial({ tempo, onChange, min = 20, max = 999 }: Props) {
+export function TempoDial({ tempo, onChange, min = 20, max = 999, size = "compact" }: Props) {
   const [dragging, setDragging] = useState(false);
-  const startY = useRef(0);
-  const startTempo = useRef(0);
-  const lastDy = useRef(0);
-  const lastTime = useRef(0);
-
-  const fraction = (tempo - min) / (max - min);
-  const angle = -135 + fraction * 270;
+  const lastY = useRef(0);
+  const lastT = useRef(0);
+  const acc = useRef(0);
+  const lastTap = useRef(0);
+  const large = size === "large";
 
   function handleStart(e: React.PointerEvent) {
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    const now = performance.now();
+    if (now - lastTap.current < 280) {
+      onChange(Math.round(tempo));
+      lastTap.current = 0;
+      return;
+    }
+    lastTap.current = now;
     setDragging(true);
-    startY.current = e.clientY;
-    startTempo.current = tempo;
-    lastDy.current = 0;
-    lastTime.current = performance.now();
+    lastY.current = e.clientY;
+    lastT.current = now;
+    acc.current = tempo;
   }
 
   function handleMove(e: React.PointerEvent) {
     if (!dragging) return;
-    const dy = e.clientY - startY.current;
     const now = performance.now();
-    const dt = now - lastTime.current || 1;
-    const velocity = Math.abs((dy - lastDy.current) / dt);
-    const sensitivity = velocity > 0.8 ? 0.3 : 0.6;
-    const next = Math.min(
-      max,
-      Math.max(min, startTempo.current - dy * sensitivity),
-    );
-    onChange(Math.round(next * 10) / 10);
-    lastDy.current = dy;
-    lastTime.current = now;
+    const dy = lastY.current - e.clientY;
+    const dt = now - lastT.current || 1;
+    const velocity = Math.abs(dy / dt);
+    const perPx = velocity > 0.9 ? 0.5 : 0.1;
+    acc.current = Math.min(max, Math.max(min, acc.current + dy * perPx));
+    onChange(Math.round(acc.current * 10) / 10);
+    lastY.current = e.clientY;
+    lastT.current = now;
   }
 
   function handleEnd() {
     setDragging(false);
   }
 
+  const [whole, frac] = tempo.toFixed(2).split(".");
+
   return (
     <div
-      className="flex items-center gap-3"
+      role="slider"
+      aria-label="Tempo"
+      aria-valuemin={min}
+      aria-valuemax={max}
+      aria-valuenow={tempo}
       onPointerDown={handleStart}
       onPointerMove={handleMove}
       onPointerUp={handleEnd}
       onPointerCancel={handleEnd}
-      style={{ touchAction: "none" }}
+      className="vfd flex items-end"
+      style={{
+        touchAction: "none",
+        cursor: dragging ? "grabbing" : "ns-resize",
+        padding: large ? "14px 18px 12px" : "8px 12px 7px",
+        gap: large ? 10 : 7,
+        boxShadow: dragging
+          ? "inset 0 0 0 1px var(--color-accent-cue), inset 0 3px 10px rgba(0,0,0,0.8), 0 0 16px rgba(255,178,62,0.2)"
+          : undefined,
+        transition: "box-shadow 120ms var(--ease-instrument)",
+      }}
     >
-      <div
-        className="relative rounded-full flex items-center justify-center"
+      <div className="relative" style={{ lineHeight: 1 }}>
+        {/* unlit ghost segments behind the digits */}
+        <span
+          aria-hidden
+          className="seg"
+          style={{
+            position: "absolute",
+            right: 0,
+            bottom: 0,
+            fontSize: large ? 52 : 26,
+            color: "var(--color-vfd-ghost)",
+            textShadow: "none",
+            whiteSpace: "nowrap",
+          }}
+        >
+          888.88
+        </span>
+        <span className="seg" style={{ position: "relative", fontSize: large ? 52 : 26, whiteSpace: "nowrap" }}>
+          {whole.padStart(3, "!")}.{frac}
+        </span>
+      </div>
+      <span
         style={{
-          width: SIZE,
-          height: SIZE,
-          background: "var(--color-surface-3)",
-          border: `1px solid ${dragging ? "var(--color-accent-play)" : "var(--color-border-strong)"}`,
-          boxShadow: "var(--shadow-inset-soft)",
-          cursor: dragging ? "grabbing" : "ns-resize",
-          transition: "border-color 120ms var(--ease-instrument)",
+          fontFamily: "var(--font-display)",
+          fontWeight: 700,
+          fontSize: large ? 14 : 11,
+          letterSpacing: "0.12em",
+          color: "var(--color-vfd-ink)",
+          opacity: 0.75,
+          paddingBottom: large ? 4 : 2,
         }}
       >
-        {/* Tick at 0deg (12 o'clock) */}
-        <span
-          className="absolute"
-          style={{
-            top: 4,
-            left: "50%",
-            transform: "translateX(-50%)",
-            width: 2,
-            height: 6,
-            borderRadius: 1,
-            background: "var(--color-border-strong)",
-          }}
-        />
-        {/* Value indicator line */}
-        <span
-          className="absolute"
-          style={{
-            top: 8,
-            left: "50%",
-            transformOrigin: `50% ${SIZE / 2 - 8}px`,
-            transform: `translateX(-50%) rotate(${angle}deg)`,
-            width: 3,
-            height: SIZE / 2 - 8,
-            background: "var(--color-accent-play)",
-            borderRadius: 2,
-            transition: dragging
-              ? "none"
-              : "transform 120ms var(--ease-instrument)",
-          }}
-        />
-        {/* Center label */}
-        <span
-          className="absolute flex items-center justify-center"
-          style={{ inset: 0 }}
-        >
-          <span
-            className="value-mono"
-            style={{
-              fontSize: 12,
-              color: "var(--color-text-2)",
-              fontWeight: 600,
-              marginTop: 4,
-            }}
-          >
-            BPM
-          </span>
-        </span>
-      </div>
-
-      <div className="flex flex-col">
-        <span
-          className="value-mono"
-          style={{
-            fontSize: 28,
-            fontWeight: 700,
-            color: "var(--color-text-1)",
-            lineHeight: 1,
-          }}
-        >
-          {tempo.toFixed(2)}
-        </span>
-        <span
-          className="label-cap"
-          style={{ marginTop: 2 }}
-        >
-          Tempo
-        </span>
-      </div>
+        BPM
+      </span>
     </div>
   );
 }

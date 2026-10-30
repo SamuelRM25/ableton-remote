@@ -1,228 +1,222 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { abletonStore } from "../lib/ableton-store";
 import { useAbleton, useConnectionStatus, useLiveProp, useLatency } from "../lib/hooks";
 import { useSongClock } from "../lib/clock";
-import { IconCpu, IconSignal } from "./icons";
+import { Led, Meter } from "./hw";
 
 interface Props {
   view: string;
 }
 
+/**
+ * Header: connection LED on the left, the VFD display window in the
+ * middle (position, signature, project, transport state), CPU on the right.
+ */
 export function TopBar({ view }: Props) {
   const status = useConnectionStatus();
   const client = useAbleton();
   const latency = useLatency();
   // song.name has no listener in Live — poll slowly instead.
-  const projectName = useLiveProp<any>(client, (c) => c.song, "name", {
+  const projectName = useLiveProp<string>(client, (c) => c.song, "name", {
     listen: false,
     pollMs: 2000,
   });
-  const tempo = useLiveProp<any>(client, (c) => c.song, "tempo");
-  // Smooth interpolated transport clock (tempo + signature aware).
   const clock = useSongClock(client);
-  const cpu = useLiveProp<any>(client, (c) => c.application, "average_process_usage", {
+  const recording = !!useLiveProp<boolean>(client, (c) => c.song, "record_mode");
+  const countingIn = !!useLiveProp<boolean>(client, (c) => c.song, "is_counting_in");
+  const cpu = useLiveProp<number>(client, (c) => c.application, "average_process_usage", {
     listen: false,
     pollMs: 1000,
   });
 
-  const isPlaying = useLiveProp<any>(
-    client,
-    (c) => c.song,
-    "is_playing",
-  );
-
-  // Beat-synced pulse: when playing, set the CSS variable to the beat duration.
+  // Beat-synced CSS animations follow Live's tempo.
   useEffect(() => {
-    if (!tempo) return;
-    const beatSec = 60 / tempo;
-    document.documentElement.style.setProperty(
-      "--beat-duration",
-      `${beatSec}s`,
-    );
-  }, [tempo]);
+    if (!clock.tempo) return;
+    document.documentElement.style.setProperty("--beat-duration", `${60 / clock.tempo}s`);
+  }, [clock.tempo]);
 
-  const connectionLabel = (() => {
+  const conn = (() => {
     switch (status.kind) {
-      case "idle":
-        return "Idle";
-      case "connecting":
-        return "Connecting…";
       case "connected":
-        return "Connected";
+        return { label: "Live", color: "play", on: true };
+      case "connecting":
+        return { label: "Conectando", color: "cue", on: true };
       case "auth_required":
-        return "Auth required";
       case "auth_failed":
-        return "Auth failed";
+        return { label: "Contraseña", color: "critical", on: true };
+      case "error":
+        return { label: "Sin Live", color: "critical", on: true };
       case "disconnected":
-        return "Disconnected";
-      case "error":
-        return "Error";
+        return { label: "Desconectado", color: "critical", on: true };
+      default:
+        return { label: "Inactivo", color: "white", on: false };
     }
   })();
 
-  const connectionColor = (() => {
-    switch (status.kind) {
-      case "connected":
-        return "var(--color-accent-link)";
-      case "connecting":
-        return "var(--color-accent-cue)";
-      case "auth_required":
-      case "auth_failed":
-      case "error":
-        return "var(--color-critical)";
-      default:
-        return "var(--color-text-3)";
-    }
-  })();
+  const connected = status.kind === "connected";
 
   return (
     <header
-      className="h-14 shrink-0 flex items-center px-3 sm:px-5 gap-3 sm:gap-5"
+      className="shrink-0 flex items-center px-3 sm:px-4 gap-3 sm:gap-4 pt-safe"
       style={{
-        background: "var(--color-surface-1)",
-        borderBottom: "1px solid var(--color-border)",
+        minHeight: 64,
+        background:
+          "linear-gradient(180deg, #202226 0%, #191a1e 100%)",
+        borderBottom: "1px solid rgba(0,0,0,0.85)",
+        boxShadow: "inset 0 -1px 0 rgba(255,255,255,0.04), 0 6px 18px rgba(0,0,0,0.35)",
       }}
     >
-      {/* Connection badge */}
-      <div className="flex items-center gap-2.5">
-        <span
-          className="w-2 h-2 rounded-full"
-          style={{
-            background: connectionColor,
-            boxShadow:
-              status.kind === "connected"
-                ? `0 0 0 4px color-mix(in srgb, ${connectionColor} 22%, transparent)`
-                : undefined,
-            transition: "background 200ms var(--ease-instrument)",
-          }}
-        />
-        <span
-          className="label-cap"
-          style={{ color: "var(--color-text-1)" }}
-        >
-          {connectionLabel}
-        </span>
-        {latency !== null && status.kind === "connected" && (
+      {/* Brand + connection */}
+      <div className="flex items-center gap-2.5 shrink-0">
+        <div className="flex flex-col" style={{ lineHeight: 1 }}>
           <span
-            className="value-mono text-text-3 hidden sm:inline"
-            style={{ fontSize: 11 }}
+            style={{
+              fontFamily: "var(--font-display)",
+              fontWeight: 700,
+              fontSize: 15,
+              letterSpacing: "0.16em",
+              color: "var(--color-text-1)",
+            }}
           >
-            {latency}ms
+            REMOTE
           </span>
-        )}
-        {status.kind === "error" && (
+          <span className="flex items-center gap-1.5" style={{ marginTop: 5 }}>
+            <Led on={conn.on} color={conn.color} size={6} blink={status.kind === "connecting"} />
+            <span className="label-cap" style={{ fontSize: 10, color: connected ? "var(--color-text-2)" : undefined }}>
+              {conn.label}
+              {connected && latency !== null && (
+                <span className="value-mono hidden sm:inline" style={{ marginLeft: 6, fontSize: 9, letterSpacing: 0 }}>
+                  {latency}ms
+                </span>
+              )}
+            </span>
+          </span>
+        </div>
+        {(status.kind === "error" || status.kind === "disconnected") && (
           <button
             onClick={() => abletonStore.getState().reconnect()}
-            className="label-cap"
-            style={{ color: "var(--color-accent-link)" }}
+            className="tactile label-cap"
+            style={{ height: 28, padding: "0 10px", color: "var(--color-accent-link)", fontSize: 11 }}
           >
-            Retry
+            Reintentar
           </button>
         )}
       </div>
 
-      <Divider />
-
-      {/* View title */}
-      <div className="flex items-center gap-2">
+      {/* VFD window */}
+      <div
+        className="vfd flex-1 min-w-0 flex items-center gap-3 sm:gap-5"
+        style={{ height: 46, padding: "0 14px", maxWidth: 760, margin: "0 auto" }}
+      >
         <span
-          className="label-cap"
-          style={{ color: "var(--color-text-3)" }}
-        >
-          View
-        </span>
-        <span
-          className="text-md font-semibold"
-          style={{ letterSpacing: "-0.01em" }}
+          className="shrink-0"
+          style={{
+            fontFamily: "var(--font-display)",
+            fontWeight: 600,
+            fontSize: 12,
+            letterSpacing: "0.14em",
+            textTransform: "uppercase",
+            color: "var(--color-vfd-ink)",
+            opacity: 0.7,
+          }}
         >
           {view}
         </span>
-      </div>
 
-      <Divider />
+        <VfdDivider />
 
-      {/* Project name + beat-synced pulse (hidden on phones) */}
-      <div className="hidden md:flex items-center gap-2.5 min-w-0">
-        {isPlaying && tempo ? (
-          <span
-            className="beat-dot w-2 h-2 rounded-full"
-            style={{ background: "var(--color-accent-play)" }}
-          />
-        ) : (
-          <span
-            className="w-2 h-2 rounded-full"
-            style={{ background: "var(--color-text-3)" }}
-          />
-        )}
-        <span
-          className="text-md font-semibold truncate"
-          style={{ letterSpacing: "-0.01em" }}
-        >
-          {projectName ?? "—"}
+        {/* transport state glyphs */}
+        <span className="shrink-0 flex items-center gap-2" aria-label="Estado del transporte">
+          <VfdGlyph on={clock.isPlaying} title="Reproduciendo">
+            <svg width="11" height="12" viewBox="0 0 11 12" fill="currentColor"><path d="M1 0.5 L10.5 6 L1 11.5Z" /></svg>
+          </VfdGlyph>
+          <VfdGlyph on={recording} title="Grabando" color="var(--color-accent-rec)">
+            <svg width="11" height="11" viewBox="0 0 11 11" fill="currentColor"><circle cx="5.5" cy="5.5" r="5" /></svg>
+          </VfdGlyph>
         </span>
+
+        {/* position */}
+        <span className="seg shrink-0" style={{ fontSize: 22, lineHeight: 1 }} aria-label="Posición">
+          {countingIn ? "-.-.-" : clock.barsDisplay}
+        </span>
+
+        <span
+          className="hidden sm:inline shrink-0"
+          style={{
+            fontFamily: "var(--font-display)",
+            fontWeight: 700,
+            fontSize: 14,
+            color: "var(--color-vfd-ink)",
+            textShadow: "0 0 6px rgba(255,178,62,0.45)",
+          }}
+        >
+          {clock.signatureDisplay}
+        </span>
+
+        <span className="hidden md:inline-flex"><VfdDivider /></span>
+
+        <span
+          className="hidden md:block truncate min-w-0"
+          style={{
+            fontFamily: "var(--font-display)",
+            fontWeight: 600,
+            fontSize: 16,
+            letterSpacing: "0.04em",
+            color: "var(--color-vfd-ink)",
+            textShadow: "0 0 6px rgba(255,178,62,0.45)",
+          }}
+          title={projectName}
+        >
+          {connected ? projectName || "Sin título" : "Esperando a Live"}
+        </span>
+
+        {clock.isPlaying && (
+          <span className="beat-dot shrink-0 ml-auto hidden sm:block" aria-hidden>
+            <Led on color="var(--color-vfd-ink)" size={6} />
+          </span>
+        )}
       </div>
 
-      <div className="flex-1" />
-
-      {/* CPU meter (hidden on phones/tablets) */}
+      {/* CPU */}
       {cpu !== undefined && (
-        <div className="hidden lg:flex items-center gap-2">
-          <IconCpu size={14} className="text-text-3" />
-          <div
-            className="w-16 h-1.5 rounded-full overflow-hidden"
-            style={{ background: "var(--color-surface-3)" }}
-          >
-            <div
-              className="h-full"
-              style={{
-                width: `${Math.round(cpu * 100)}%`,
-                background:
-                  cpu > 0.85
-                    ? "var(--color-accent-rec)"
-                    : cpu > 0.6
-                      ? "var(--color-accent-cue)"
-                      : "var(--color-accent-play)",
-                transition: "width 200ms var(--ease-instrument)",
-              }}
-            />
-          </div>
-          <span
-            className="value-mono text-text-3"
-            style={{ fontSize: 11, width: 32, textAlign: "right" }}
-          >
+        <div className="hidden lg:flex items-center gap-2 shrink-0">
+          <span className="label-cap" style={{ fontSize: 10 }}>CPU</span>
+          <Meter level={cpu} vertical={false} thickness={8} length={64} segments={12} />
+          <span className="value-mono" style={{ fontSize: 11, width: 30, textAlign: "right", color: "var(--color-text-2)" }}>
             {Math.round(cpu * 100)}%
           </span>
         </div>
       )}
-
-      <Divider />
-
-      {/* Bars.beats.sixteenths — interpolated, signature-aware */}
-      <div className="flex items-center gap-3">
-        <IconSignal size={14} className="text-text-3" />
-        <span
-          className="value-mono"
-          style={{
-            fontSize: 16,
-            fontWeight: 600,
-            letterSpacing: "0.02em",
-            color: "var(--color-text-1)",
-          }}
-        >
-          {clock.barsDisplay}
-        </span>
-      </div>
     </header>
   );
 }
 
-function Divider() {
-  return (
-    <span
-      className="w-px h-6"
-      style={{ background: "var(--color-border)" }}
-    />
-  );
+function VfdDivider() {
+  return <span aria-hidden className="shrink-0" style={{ width: 1, height: 22, background: "rgba(255,178,62,0.18)" }} />;
 }
 
-
+function VfdGlyph({
+  on,
+  color = "var(--color-vfd-ink)",
+  title,
+  children,
+}: {
+  on: boolean;
+  color?: string;
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <span
+      title={title}
+      style={{
+        display: "flex",
+        color: on ? color : "rgba(255,178,62,0.1)",
+        filter: on ? `drop-shadow(0 0 4px ${color})` : undefined,
+        transition: "color 80ms",
+      }}
+    >
+      {children}
+    </span>
+  );
+}

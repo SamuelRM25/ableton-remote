@@ -8,6 +8,8 @@ import {
   useSends,
 } from "../lib/list-hooks";
 import { Fader } from "../components/Fader";
+import { Knob } from "../components/Knob";
+import { EmptyPanel, LedKey, Meter, ViewStrip } from "../components/hw";
 import { colorToHex } from "../lib/color";
 import { toast } from "../lib/toast";
 import { IconCheck, IconPlus, IconX } from "../components/icons";
@@ -105,29 +107,23 @@ export function MixerView() {
     }
   }
 
-  if (!client) return <Empty>Sin conexión</Empty>;
+  if (!client) return <EmptyPanel title="Live no está conectado" hint="Abre Ableton Live con AbletonJS activo como Control Surface." />;
 
   return (
     <div className="h-full flex flex-col">
-      <div
-        className="shrink-0 flex items-center gap-2 sm:gap-3 px-3 sm:px-5 py-2 flex-wrap"
-        style={{
-          background: "var(--color-surface-1)",
-          borderBottom: "1px solid var(--color-border)",
-        }}
-      >
-        <span className="label-cap">Mixer</span>
+      <ViewStrip className="flex-wrap py-2">
+        <span style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 16, letterSpacing: "0.06em" }}>Mixer</span>
         <span className="value-mono" style={{ fontSize: 12, color: "var(--color-text-3)" }}>
-          {(rawTracks?.length ?? 0) + (rawReturns?.length ?? 0) + (master ? 1 : 0)}
+          {(rawTracks?.length ?? 0)} tracks · {(rawReturns?.length ?? 0)} returns
         </span>
         <div className="flex-1" />
-        <AddBtn label="+ Audio" onClick={() => void addTrack("audio")} />
-        <AddBtn label="+ MIDI" onClick={() => void addTrack("midi")} />
-        <AddBtn label="+ Return" onClick={() => void addTrack("return")} />
-      </div>
+        <LedKey size="sm" color="play" label="+ Audio" onClick={() => void addTrack("audio")} />
+        <LedKey size="sm" color="play" label="+ MIDI" onClick={() => void addTrack("midi")} />
+        <LedKey size="sm" color="macro" label="+ Return" onClick={() => void addTrack("return")} />
+      </ViewStrip>
       <div
         className="flex-1 min-h-0 overflow-auto scroll-touch"
-        style={{ background: "var(--color-bg)", touchAction: "pan-x pan-y" }}
+        style={{ touchAction: "pan-x pan-y" }}
       >
         <div
           style={{
@@ -137,7 +133,7 @@ export function MixerView() {
             width: "max-content",
             minWidth: "100%",
             padding: 12,
-            gap: 2,
+            gap: 6,
           }}
         >
           {master && <MixerStrip key="master" client={client} track={master} isMaster />}
@@ -182,28 +178,6 @@ export function MixerView() {
   );
 }
 
-function AddBtn({ label, onClick }: { label: string; onClick: () => void }) {
-  return (
-    <button
-      onClick={onClick}
-      className="tactile"
-      style={{
-        height: 32,
-        padding: "0 12px",
-        fontSize: 12,
-        fontWeight: 600,
-        color: "var(--color-accent-play)",
-        background: "var(--color-surface-2)",
-        border: "1px solid var(--color-border)",
-        borderRadius: 8,
-        whiteSpace: "nowrap",
-      }}
-    >
-      {label}
-    </button>
-  );
-}
-
 function MixerStrip({
   client,
   track,
@@ -233,7 +207,7 @@ function MixerStrip({
   const deleteTimer = useRef<number | null>(null);
 
   const mixer = useMixerDevice(track);
-  const [liveVolume, setLiveVolume] = useMixerParam(mixer, "volume");
+  const [liveVolume, setLiveVolume, volumeDisplay] = useMixerParam(mixer, "volume");
   const [livePanning, setLivePanning] = useMixerParam(mixer, "panning");
   const [volume, setVolume] = useOptimistic<number>(liveVolume, setLiveVolume);
   const [panning, setPanning] = useOptimistic<number>(livePanning, setLivePanning);
@@ -286,19 +260,37 @@ function MixerStrip({
     <div
       className="flex flex-col items-center"
       style={{
+        position: "relative",
         flex: "1 1 0",
-        minWidth: 78,
-        maxWidth: 132,
-        padding: "10px 4px",
+        minWidth: 84,
+        maxWidth: 136,
+        padding: "0 6px 10px",
+        borderRadius: 10,
         background: isMaster
-          ? "color-mix(in srgb, var(--color-accent-play) 8%, var(--color-surface-1))"
-          : "var(--color-surface-1)",
-        borderLeft: `3px solid ${colorHex}`,
-        borderRight: "1px solid var(--color-border)",
+          ? "linear-gradient(180deg, #2a2c31 0%, #1d1f23 100%)"
+          : "linear-gradient(180deg, #23252a 0%, #1a1c20 100%)",
+        border: "1px solid rgba(0,0,0,0.7)",
+        boxShadow: isMaster
+          ? "inset 0 1px 0 rgba(255,255,255,0.07), inset 0 0 0 1px color-mix(in srgb, var(--color-accent-play) 25%, transparent), 0 6px 14px rgba(0,0,0,0.4)"
+          : "inset 0 1px 0 rgba(255,255,255,0.05), 0 6px 14px rgba(0,0,0,0.4)",
+        overflow: "hidden",
       }}
     >
+      {/* colour cap */}
+      <div
+        aria-hidden
+        style={{
+          alignSelf: "stretch",
+          height: 4,
+          margin: "0 -6px 8px",
+          background: colorHex,
+          boxShadow: `0 0 10px ${colorHex}`,
+        }}
+      />
+
+      {/* scribble strip */}
       {renaming ? (
-        <span className="flex items-center gap-1 w-full" style={{ padding: "0 2px" }}>
+        <span className="flex items-center gap-1 w-full">
           <input
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
@@ -307,31 +299,27 @@ function MixerStrip({
               if (e.key === "Escape") setRenaming(false);
             }}
             autoFocus
+            aria-label="Nombre del track"
+            className="well"
             style={{
               flex: 1,
               minWidth: 0,
-              background: "var(--color-surface-2)",
               color: "var(--color-text-1)",
-              fontSize: 11,
+              fontSize: 12,
               border: "1px solid var(--color-accent-cue)",
-              borderRadius: 5,
-              padding: "3px 6px",
+              padding: "4px 6px",
               outline: "none",
             }}
           />
-          <button
-            onClick={() => void saveRename()}
-            aria-label="Guardar nombre"
-            style={{ color: "var(--color-accent-play)", display: "flex" }}
-          >
-            <IconCheck size={14} />
+          <button onClick={() => void saveRename()} aria-label="Guardar nombre" style={{ color: "var(--color-accent-play)", display: "flex" }}>
+            <IconCheck size={15} />
           </button>
           {onDelete && (
             <button
               onClick={handleDeleteTap}
               aria-label="Borrar track"
               style={{
-                color: "var(--color-critical)",
+                color: armingDelete ? "var(--color-text-inverse)" : "var(--color-critical)",
                 display: "flex",
                 background: armingDelete ? "var(--color-critical)" : undefined,
                 borderRadius: 4,
@@ -345,124 +333,119 @@ function MixerStrip({
       ) : (
         <button
           onClick={isMaster ? undefined : startRename}
-          onDoubleClick={isMaster ? undefined : startRename}
-          className="truncate w-full text-center"
-          title={isMaster ? "Master" : "Toca para renombrar"}
+          className="vfd truncate w-full text-center"
+          title={isMaster ? "Main" : "Toca para renombrar"}
           style={{
-            fontSize: 11,
-            fontWeight: 600,
-            color: isMaster ? "var(--color-accent-play)" : "var(--color-text-1)",
+            height: 26,
             padding: "0 6px",
+            fontFamily: "var(--font-display)",
+            fontSize: 13,
+            fontWeight: 600,
+            letterSpacing: "0.03em",
+            color: "var(--color-vfd-ink)",
+            textShadow: "0 0 6px rgba(255,178,62,0.45)",
           }}
         >
-          {isMaster ? "MAIN" : isReturn ? `↵ ${name ?? "—"}` : (name ?? "—")}
+          {isMaster ? "MAIN" : name ?? "—"}
         </button>
       )}
       {armingDelete && (
-        <span className="label-cap" style={{ fontSize: 8.5, color: "var(--color-critical)", marginTop: 2 }}>
-          ¿borrar? toca ✕
+        <span className="label-cap" style={{ fontSize: 9, color: "var(--color-critical)", marginTop: 3 }}>
+          Toca ✕ otra vez
         </span>
       )}
+      <span className="label-cap" style={{ fontSize: 9, marginTop: 4 }}>
+        {isMaster ? "Master" : isReturn ? "Return" : "Track"}
+      </span>
 
+      {/* pan */}
+      <div className="flex flex-col items-center" style={{ marginTop: 8 }}>
+        <Knob
+          value={panning ?? 0}
+          min={-1}
+          max={1}
+          size={40}
+          bare
+          bipolar
+          defaultValue={0}
+          color="var(--color-accent-cue)"
+          onChange={(v) => setPanning(v)}
+          ariaLabel="Panorama"
+        />
+        <span className="value-mono" style={{ fontSize: 10, color: "var(--color-text-3)", marginTop: 2 }}>
+          {formatPan(panning ?? 0)}
+        </span>
+      </div>
+
+      {/* M S R */}
       {!isMaster && (
-        <div className="flex items-center gap-1 mt-2">
-          <SmallBtn
-            label="M"
-            active={!!mute}
-            onClick={() => void safeSet(track, "mute", !mute, "mute")}
-            color="var(--color-accent-stop)"
-          />
-          <SmallBtn
-            label="S"
-            active={!!solo}
-            onClick={() => void safeSet(track, "solo", !solo, "solo")}
-            color="var(--color-accent-cue)"
-          />
-          {canArm !== false && (
-            <SmallBtn
-              label="R"
-              active={!!arm}
-              onClick={() => void safeSet(track, "arm", !arm, "arm")}
-              color="var(--color-accent-rec)"
-            />
+        <div className="flex items-center gap-1" style={{ marginTop: 8 }}>
+          <LedKey size="xs" label="M" color="stop" active={!!mute} onClick={() => void safeSet(track, "mute", !mute, "mute")} width={24} />
+          <LedKey size="xs" label="S" color="solo" active={!!solo} onClick={() => void safeSet(track, "solo", !solo, "solo")} width={24} />
+          {canArm !== false && !isReturn && (
+            <LedKey size="xs" label="R" color="rec" active={!!arm} onClick={() => void safeSet(track, "arm", !arm, "arm")} width={24} />
           )}
         </div>
       )}
 
-      <div className="mt-2 flex items-stretch gap-1.5" style={{ flex: 1, minHeight: 130 }}>
+      {/* fader + meters */}
+      <div className="flex items-stretch justify-center gap-2 w-full" style={{ flex: 1, minHeight: 150, marginTop: 10 }}>
         <Fader
           value={volume ?? 0.85}
           onChange={(v) => setVolume(v)}
-          width={30}
+          width={34}
           height="100%"
           vertical
+          scale
+          defaultValue={0.85}
+          color={isMaster ? "var(--color-accent-play)" : "var(--color-accent-cue)"}
+          ariaLabel={`Volumen ${isMaster ? "main" : name ?? ""}`}
         />
-        <div className="flex gap-0.5" style={{ width: 12 }}>
-          <MeterBar level={meterL ?? 0} />
-          <MeterBar level={meterR ?? 0} />
+        <div className="flex gap-0.5">
+          <Meter level={meterL ?? 0} thickness={6} segments={28} />
+          <Meter level={meterR ?? 0} thickness={6} segments={28} />
         </div>
       </div>
 
-      <div className="value-mono mt-1.5" style={{ fontSize: 10, color: "var(--color-text-3)" }}>
-        {volumeToDb(volume ?? 0.85)}
+      <div className="vfd value-mono" style={{ marginTop: 8, padding: "3px 8px", fontSize: 11, fontWeight: 700, color: "var(--color-vfd-ink)", textShadow: "0 0 5px rgba(255,178,62,0.45)" }}>
+        {volume !== undefined && liveVolume !== undefined && Math.abs(volume - liveVolume) < 0.0005 && volumeDisplay
+          ? volumeDisplay
+          : volumeToDb(volume ?? 0.85)}
       </div>
 
-      <div className="mt-1.5 flex items-center" style={{ height: 28 }}>
-        <Knob value={panning ?? 0} onChange={(v) => setPanning(v)} />
-      </div>
-      <div className="label-cap" style={{ fontSize: 9, color: "var(--color-text-3)" }}>
-        Pan
-      </div>
-
-      <div className="flex items-center gap-1 mt-2">
+      <div className="flex items-center gap-1" style={{ marginTop: 8 }}>
         {sends && sends.length > 0 && (
-          <button
+          <LedKey
+            size="xs"
+            variant="ring"
+            color="cue"
+            active={sendsOpen}
+            label="Sends"
             onClick={() => {
               setSendsOpen((e) => !e);
               if (!sendsOpen) setIoOpen(false);
             }}
-            className="tactile"
-            style={{
-              height: 22,
-              padding: "0 8px",
-              fontSize: 10,
-              fontWeight: 600,
-              color: sendsOpen ? "var(--color-accent-cue)" : "var(--color-text-2)",
-              background: "var(--color-surface-2)",
-              border: "1px solid var(--color-border)",
-              borderRadius: 5,
-            }}
-          >
-            Sends
-          </button>
+          />
         )}
         {!isMaster && (
-          <button
+          <LedKey
+            size="xs"
+            variant="ring"
+            color="link"
+            active={ioOpen}
+            label="I/O"
             onClick={() => {
               setIoOpen((e) => !e);
               if (!ioOpen) setSendsOpen(false);
             }}
-            className="tactile"
-            style={{
-              height: 22,
-              padding: "0 8px",
-              fontSize: 10,
-              fontWeight: 600,
-              color: ioOpen ? "var(--color-accent-link)" : "var(--color-text-2)",
-              background: "var(--color-surface-2)",
-              border: "1px solid var(--color-border)",
-              borderRadius: 5,
-            }}
-          >
-            I/O
-          </button>
+          />
         )}
       </div>
 
       {sendsOpen && sends && (
-        <div className="mt-2 flex gap-1.5">
+        <div className="mt-2 flex flex-wrap justify-center gap-1.5">
           {sends.map((s: any, i: number) => (
-            <SendStrip key={(s as any).nsid ?? (s as any).raw?.id ?? i} index={i} param={s} />
+            <SendKnob key={(s as any).raw?.id ?? i} index={i} param={s} />
           ))}
         </div>
       )}
@@ -472,48 +455,48 @@ function MixerStrip({
   );
 }
 
+const nameOf = (x: any): string =>
+  x == null ? "" : typeof x === "string" ? x : String(x.display_name ?? "");
+
+/**
+ * Input/output routing. Uses Live 11+/12 routing API
+ * (input_routing_type / input_routing_channel …), which the MIDI script
+ * serialises as { display_name } objects and accepts by display name.
+ */
 function IoPanel({ track }: { track: any }) {
+  const inType = useLiveChildProp<any>(track, "input_routing_type");
+  const inCh = useLiveChildProp<any>(track, "input_routing_channel");
+  const outType = useLiveChildProp<any>(track, "output_routing_type");
+  const outCh = useLiveChildProp<any>(track, "output_routing_channel");
   const [opts, setOpts] = useState<{
     inTypes: string[];
-    inSubs: string[];
+    inChs: string[];
     outTypes: string[];
-    outSubs: string[];
+    outChs: string[];
   } | null>(null);
 
-  const inType = useLiveChildProp<string>(track, "current_input_routing");
-  const inSub = useLiveChildProp<string>(track, "current_input_sub_routing");
-  const outType = useLiveChildProp<string>(track, "current_output_routing");
-  const outSub = useLiveChildProp<string>(track, "current_output_sub_routing");
+  const inTypeName = nameOf(inType);
+  const outTypeName = nameOf(outType);
 
+  // Available channels depend on the selected type: refetch when it changes.
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      try {
-        const [inTypes, inSubs, outTypes, outSubs] = await Promise.all([
-          track.get("available_input_routing_types").catch(() => []),
-          track.get("available_input_routing_channels").catch(() => []),
-          track.get("available_output_routing_types").catch(() => []),
-          track.get("available_output_routing_channels").catch(() => []),
-        ]);
-        if (cancelled) return;
-        const names = (arr: any): string[] =>
-          (Array.isArray(arr) ? arr : []).map((x) =>
-            typeof x === "string" ? x : (x.display_name ?? String(x)),
-          );
-        setOpts({
-          inTypes: names(inTypes),
-          inSubs: names(inSubs),
-          outTypes: names(outTypes),
-          outSubs: names(outSubs),
-        });
-      } catch {
-        // ignore
-      }
+      const get = (p: string) => track.get(p).catch(() => []);
+      const [inTypes, inChs, outTypes, outChs] = await Promise.all([
+        get("available_input_routing_types"),
+        get("available_input_routing_channels"),
+        get("available_output_routing_types"),
+        get("available_output_routing_channels"),
+      ]);
+      if (cancelled) return;
+      const names = (arr: any): string[] => (Array.isArray(arr) ? arr : []).map(nameOf).filter(Boolean);
+      setOpts({ inTypes: names(inTypes), inChs: names(inChs), outTypes: names(outTypes), outChs: names(outChs) });
     })();
     return () => {
       cancelled = true;
     };
-  }, [track]);
+  }, [track, inTypeName, outTypeName]);
 
   async function setRouting(prop: string, value: string, label: string) {
     try {
@@ -524,39 +507,15 @@ function IoPanel({ track }: { track: any }) {
   }
 
   if (!opts) {
-    return (
-      <div className="label-cap mt-2" style={{ fontSize: 9 }}>
-        Cargando I/O…
-      </div>
-    );
+    return <div className="label-cap mt-2" style={{ fontSize: 9 }}>Leyendo I/O…</div>;
   }
 
   return (
-    <div className="flex flex-col gap-1.5 mt-2 w-full" style={{ padding: "0 2px" }}>
-      <IoRow
-        label="In"
-        value={inType ?? ""}
-        options={opts.inTypes}
-        onChange={(v) => void setRouting("current_input_routing", v, "entrada")}
-      />
-      <IoRow
-        label="Ch"
-        value={inSub ?? ""}
-        options={opts.inSubs}
-        onChange={(v) => void setRouting("current_input_sub_routing", v, "canal de entrada")}
-      />
-      <IoRow
-        label="Out"
-        value={outType ?? ""}
-        options={opts.outTypes}
-        onChange={(v) => void setRouting("current_output_routing", v, "salida")}
-      />
-      <IoRow
-        label="Ch"
-        value={outSub ?? ""}
-        options={opts.outSubs}
-        onChange={(v) => void setRouting("current_output_sub_routing", v, "canal de salida")}
-      />
+    <div className="flex flex-col gap-1.5 mt-2 w-full">
+      <IoRow label="In" value={inTypeName} options={opts.inTypes} onChange={(v) => void setRouting("input_routing_type", v, "la entrada")} />
+      <IoRow label="Ch" value={nameOf(inCh)} options={opts.inChs} onChange={(v) => void setRouting("input_routing_channel", v, "el canal de entrada")} />
+      <IoRow label="Out" value={outTypeName} options={opts.outTypes} onChange={(v) => void setRouting("output_routing_type", v, "la salida")} />
+      <IoRow label="Ch" value={nameOf(outCh)} options={opts.outChs} onChange={(v) => void setRouting("output_routing_channel", v, "el canal de salida")} />
     </div>
   );
 }
@@ -574,27 +533,22 @@ function IoRow({
 }) {
   const shown = options.includes(value) ? value : "";
   return (
-    <label className="flex items-center gap-1 w-full">
-      <span className="label-cap shrink-0" style={{ fontSize: 8.5, width: 20 }}>
-        {label}
-      </span>
+    <label className="flex flex-col gap-0.5 w-full">
+      <span className="label-cap" style={{ fontSize: 9 }}>{label}</span>
       <select
         value={shown}
         onChange={(e) => e.target.value && onChange(e.target.value)}
         style={{
-          flex: 1,
+          width: "100%",
           minWidth: 0,
-          background: "var(--color-surface-2)",
           color: "var(--color-text-1)",
-          border: "1px solid var(--color-border)",
-          borderRadius: 5,
-          padding: "3px 4px",
-          fontSize: 10,
-          overflow: "hidden",
-          textOverflow: "ellipsis",
+          border: "1px solid rgba(0,0,0,0.6)",
+          borderRadius: 4,
+          padding: "4px 4px",
+          fontSize: 11,
         }}
       >
-        {shown === "" && <option value="">—</option>}
+        {shown === "" && <option value="">{value || "—"}</option>}
         {options.map((o) => (
           <option key={o} value={o}>
             {o}
@@ -605,173 +559,29 @@ function IoRow({
   );
 }
 
-function SendStrip({ index, param }: { index: number; param: any }) {
-  const sendAmount = useLiveChildProp<number>(param, "value");
+function SendKnob({ index, param }: { index: number; param: any }) {
+  const live = useLiveChildProp<number>(param, "value");
+  const [amount, setAmount] = useOptimistic<number>(live, (v) => {
+    void param.set("value", v).catch(() => toast("No se pudo cambiar el send"));
+  });
   return (
-    <div className="flex flex-col items-center gap-1">
-      <span className="label-cap" style={{ fontSize: 9 }}>
-        {String.fromCharCode(65 + index)}
-      </span>
-      <Fader
-        value={sendAmount ?? 0}
-        onChange={(v) => {
-          void param.set("value", v).catch(() => toast("No se pudo cambiar el send"));
-        }}
-        width={16}
-        height={64}
-        vertical
-      />
+    <div className="flex flex-col items-center gap-0.5">
+      <Knob value={amount ?? 0} onChange={setAmount} size={34} bare color="var(--color-accent-macro)" defaultValue={0} ariaLabel={`Send ${String.fromCharCode(65 + index)}`} />
+      <span className="label-cap" style={{ fontSize: 9 }}>{String.fromCharCode(65 + index)}</span>
     </div>
   );
 }
 
-function MeterBar({ level }: { level: number }) {
-  const fraction = Math.min(1, Math.max(0, level));
-  const color =
-    fraction > 0.85
-      ? "var(--color-accent-rec)"
-      : fraction > 0.6
-        ? "var(--color-accent-cue)"
-        : "var(--color-accent-play)";
-  return (
-    <div
-      className="rounded-sm overflow-hidden"
-      style={{
-        background: "var(--color-surface-3)",
-        flex: 1,
-        width: "100%",
-        position: "relative",
-      }}
-    >
-      <div
-        style={{
-          position: "absolute",
-          left: 0,
-          right: 0,
-          bottom: 0,
-          height: `${fraction * 100}%`,
-          background: color,
-          transition: "height 60ms linear",
-        }}
-      />
-    </div>
-  );
-}
-
-function SmallBtn({
-  label,
-  active,
-  onClick,
-  color,
-}: {
-  label: string;
-  active: boolean;
-  onClick: () => void;
-  color: string;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className="tactile"
-      style={{
-        width: 20,
-        height: 18,
-        fontFamily: "var(--font-mono)",
-        fontSize: 10,
-        fontWeight: 700,
-        color: active ? "var(--color-text-inverse)" : "var(--color-text-2)",
-        background: active ? color : undefined,
-        borderRadius: 4,
-      }}
-    >
-      {label}
-    </button>
-  );
-}
-
-function Knob({
-  value,
-  onChange,
-  size = 28,
-}: {
-  value: number;
-  onChange: (v: number) => void;
-  size?: number;
-}) {
-  const [dragging, setDragging] = useState(false);
-  const startY = useRef(0);
-  const startVal = useRef(0);
-
-  const fraction = (value + 1) / 2;
-  const angle = -135 + fraction * 270;
-
-  function handleStart(e: React.PointerEvent) {
-    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-    setDragging(true);
-    startY.current = e.clientY;
-    startVal.current = value;
-  }
-  function handleMove(e: React.PointerEvent) {
-    if (!dragging) return;
-    const dy = startY.current - e.clientY;
-    const next = startVal.current + dy / 100;
-    onChange(Math.max(-1, Math.min(1, next)));
-  }
-  function handleEnd() {
-    setDragging(false);
-  }
-
-  return (
-    <div
-      onPointerDown={handleStart}
-      onPointerMove={handleMove}
-      onPointerUp={handleEnd}
-      onPointerCancel={handleEnd}
-      style={{
-        width: size,
-        height: size,
-        borderRadius: "50%",
-        background: "var(--color-surface-3)",
-        border: `1px solid ${dragging ? "var(--color-accent-cue)" : "var(--color-border-strong)"}`,
-        position: "relative",
-        cursor: dragging ? "grabbing" : "ns-resize",
-        touchAction: "none",
-        boxShadow: "var(--shadow-inset-soft)",
-      }}
-    >
-      <div
-        style={{
-          position: "absolute",
-          top: 2,
-          left: "50%",
-          transformOrigin: `50% ${size / 2 - 2}px`,
-          transform: `translateX(-50%) rotate(${angle}deg)`,
-          width: 2,
-          height: size / 2 - 2,
-          background: "var(--color-accent-macro)",
-          borderRadius: 1,
-          transition: dragging
-            ? "none"
-            : "transform 100ms var(--ease-instrument)",
-        }}
-      />
-    </div>
-  );
-}
-
-function Empty({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="h-full flex items-center justify-center">
-      <span className="label-cap" style={{ color: "var(--color-text-3)" }}>
-        {children}
-      </span>
-    </div>
-  );
+function formatPan(p: number): string {
+  const v = Math.round(p * 50);
+  if (v === 0) return "C";
+  return v < 0 ? `${-v}L` : `${v}R`;
 }
 
 function volumeToDb(v: number): string {
-  if (v <= 0) return "−∞";
+  if (v <= 0.0001) return "−∞ dB";
+  // Rough estimate while dragging; Live's own readout replaces it on release.
   const db = 20 * Math.log10(v / 0.85);
-  return `${db >= 0 ? "+" : ""}${db.toFixed(1)}dB`;
+  const clamped = Math.max(-70, Math.min(6, db));
+  return `${clamped >= 0 ? "+" : "−"}${Math.abs(clamped).toFixed(1)} dB`;
 }
-

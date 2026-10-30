@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import { useAbleton } from "../lib/hooks";
-import { useLiveChildProp } from "../lib/list-hooks";
-import { Knob } from "../components/Knob";
+import { useLiveChildProp, useParamDisplay } from "../lib/list-hooks";
+import { useOptimistic } from "../lib/hooks";
+import { EmptyPanel, LedKey, ViewStrip } from "../components/hw";
+import { toast } from "../lib/toast";
 import { Fader } from "../components/Fader";
 import { DevicePicker } from "../components/DevicePicker";
 
@@ -49,162 +51,120 @@ export function DeviceView() {
   const type = useLiveChildProp<number>(device, "type");
   const parameters = useLiveChildProp<any[]>(device, "parameters");
 
-  if (!client) return <Empty>Sin conexión</Empty>;
+  if (!client) {
+    return <EmptyPanel title="Live no está conectado" hint="Abre Ableton Live con AbletonJS activo como Control Surface." />;
+  }
   const hasDevice = !!device;
 
   return (
     <div className="h-full flex flex-col">
-      <div
-        className="h-14 shrink-0 flex items-center px-5 gap-4"
-        style={{
-          background: "var(--color-surface-1)",
-          borderBottom: "1px solid var(--color-border)",
-        }}
-      >
-        <div className="flex flex-col">
-          <span className="label-cap">Device</span>
-          <span
-            className="truncate"
-            style={{ fontSize: 16, fontWeight: 600, color: "var(--color-text-1)" }}
-          >
-            {name ?? "—"}
+      <ViewStrip>
+        <div className="flex flex-col min-w-0">
+          <span className="label-cap" style={{ fontSize: 10 }}>Device · {className ?? "—"}</span>
+          <span className="truncate" style={{ fontFamily: "var(--font-display)", fontSize: 19, fontWeight: 700, letterSpacing: "0.02em" }}>
+            {hasDevice ? name ?? "—" : "Ningún device"}
           </span>
         </div>
-        <span
-          className="value-mono"
-          style={{ fontSize: 11, color: "var(--color-text-3)" }}
-        >
-          {className ?? "—"}
-        </span>
         <div className="flex-1" />
-      </div>
+        {parameters && (
+          <span className="value-mono" style={{ fontSize: 12, color: "var(--color-text-3)" }}>
+            {parameters.length} parámetros
+          </span>
+        )}
+      </ViewStrip>
 
-      {client && <DevicePicker client={client} />}
+      <DevicePicker client={client} />
 
-      <div
-        className="flex-1 min-h-0 overflow-auto scroll-touch"
-        style={{ background: "var(--color-bg)" }}
-      >
+      <div className="flex-1 min-h-0 overflow-auto scroll-touch">
         {!hasDevice ? (
-          <Empty>Elige un track y un device arriba para ver sus parámetros</Empty>
+          <EmptyPanel title="Elige un device" hint="Toca un track y luego uno de sus devices en la barra de arriba." />
         ) : parameters && parameters.length > 0 ? (
           <div
-            className="grid gap-2 p-4"
-            style={{
-              gridTemplateColumns: "repeat(auto-fill, minmax(min(280px, 100%), 1fr))",
-            }}
+            className="grid gap-2 p-3 sm:p-4"
+            style={{ gridTemplateColumns: "repeat(auto-fill, minmax(min(300px, 100%), 1fr))" }}
           >
             {parameters.map((p, i) => (
-              <ParamRow key={p.raw?.id ?? p.nsid ?? i} param={p} index={i} />
+              <ParamRow key={p.raw?.id ?? p.nsid ?? i} param={p} />
             ))}
           </div>
         ) : (
-          <Empty>Sin parámetros</Empty>
+          <EmptyPanel title="Este device no tiene parámetros" />
         )}
       </div>
     </div>
   );
 }
 
-function ParamRow({ param, index }: { param: any; index: number }) {
+function ParamRow({ param }: { param: any }) {
   const name = useLiveChildProp<string>(param, "name");
-  const value = useLiveChildProp<number>(param, "value");
+  const live = useLiveChildProp<number>(param, "value");
   const min = useLiveChildProp<number>(param, "min");
   const max = useLiveChildProp<number>(param, "max");
   const isQuantized = useLiveChildProp<boolean>(param, "is_quantized");
   const valueItems = useLiveChildProp<string[]>(param, "value_items");
-  const valueStr = useLiveChildProp<string>(param, "value_string");
+  const [value, setValue] = useOptimistic<number>(live, (v) => {
+    void param.set("value", v).catch(() => toast("No se pudo cambiar el parámetro"));
+  });
+  const display = useParamDisplay(param, live);
+  const lo = min ?? 0;
+  const hi = max ?? 1;
 
   return (
-    <div
-      className="flex items-center gap-3"
-      style={{
-        background: "var(--color-surface-1)",
-        border: "1px solid var(--color-border)",
-        borderRadius: 10,
-        padding: "10px 14px",
-      }}
-    >
-      <span
-        className="value-mono"
-        style={{
-          fontSize: 10,
-          color: "var(--color-text-3)",
-          width: 24,
-        }}
-      >
-        {String(index + 1).padStart(2, "0")}
-      </span>
-      <span
-        className="truncate"
-        style={{
-          flex: 1,
-          fontSize: 13,
-          fontWeight: 500,
-          color: "var(--color-text-1)",
-        }}
-      >
-        {name ?? "—"}
-      </span>
-      {isQuantized && valueItems && valueItems.length > 0 ? (
-        <select
-          value={value ?? 0}
-          onChange={(e) => {
-            void param.set("value", Number(e.target.value)).catch(() => {});
-          }}
-          style={{
-            background: "var(--color-surface-2)",
-            color: "var(--color-text-1)",
-            border: "1px solid var(--color-border)",
-            borderRadius: 6,
-            padding: "4px 8px",
-            fontSize: 12,
-            fontFamily: "var(--font-mono)",
-          }}
+    <div className="panel flex flex-col gap-2" style={{ padding: "10px 12px", borderRadius: 9 }}>
+      <div className="flex items-center gap-2">
+        <span className="truncate flex-1" style={{ fontSize: 14, fontWeight: 600 }} title={name}>
+          {name ?? "—"}
+        </span>
+        <span
+          className="vfd value-mono shrink-0"
+          style={{ padding: "2px 8px", fontSize: 12, fontWeight: 700, color: "var(--color-vfd-ink)", textShadow: "0 0 5px rgba(255,178,62,0.45)", minWidth: 70, textAlign: "right" }}
         >
-          {valueItems.map((v, i) => (
-            <option key={i} value={i}>
-              {v}
-            </option>
-          ))}
-        </select>
-      ) : (
-        <>
-          <span
-            className="value-mono"
-            style={{
-              fontSize: 12,
-              fontWeight: 600,
-              color: "var(--color-text-1)",
-              width: 56,
-              textAlign: "right",
-            }}
+          {display ?? (value !== undefined ? value.toFixed(2) : "—")}
+        </span>
+      </div>
+      {isQuantized && valueItems && valueItems.length > 0 ? (
+        valueItems.length <= 6 ? (
+          <div className="flex flex-wrap gap-1">
+            {valueItems.map((v, i) => (
+              <LedKey
+                key={i}
+                size="xs"
+                variant="ring"
+                color="macro"
+                active={Math.round(value ?? 0) === i}
+                label={v}
+                onClick={() => setValue(i)}
+                style={{ textTransform: "none", height: 26, padding: "0 8px" }}
+              />
+            ))}
+          </div>
+        ) : (
+          <select
+            value={Math.round(value ?? 0)}
+            onChange={(e) => setValue(Number(e.target.value))}
+            aria-label={name}
+            style={{ border: "1px solid rgba(0,0,0,0.6)", borderRadius: 5, padding: "6px 8px", fontSize: 13 }}
           >
-            {valueStr ?? (value !== undefined ? value.toFixed(2) : "—")}
-          </span>
-          <Fader
-            value={value ?? 0}
-            min={min ?? 0}
-            max={max ?? 1}
-            onChange={(v) => {
-            void param.set("value", v).catch(() => {});
-          }}
-            width={120}
-            height={20}
-            vertical={false}
-          />
-        </>
+            {valueItems.map((v, i) => (
+              <option key={i} value={i}>
+                {v}
+              </option>
+            ))}
+          </select>
+        )
+      ) : (
+        <Fader
+          value={value ?? lo}
+          min={lo}
+          max={hi}
+          onChange={setValue}
+          width="100%"
+          height={26}
+          vertical={false}
+          color="var(--color-accent-macro)"
+          ariaLabel={name}
+        />
       )}
-    </div>
-  );
-}
-
-function Empty({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="h-full flex items-center justify-center">
-      <span className="label-cap" style={{ color: "var(--color-text-3)" }}>
-        {children}
-      </span>
     </div>
   );
 }

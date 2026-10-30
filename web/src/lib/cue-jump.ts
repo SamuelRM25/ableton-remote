@@ -1,9 +1,10 @@
 import type { Ableton } from "ableton-js";
 
 /**
- * Live's arrangement timeline is seconds-based (cue.time, current_song_time)
- * but jumpBy/scrub and loop_start/loop_length are BEATS-based.
- * Convert with the current tempo.
+ * Units: Live's arrangement API is BEATS-based everywhere —
+ * current_song_time, cue_point.time, Song.jump_by, loop_start and
+ * loop_length are all in quarter-note beats. No tempo conversion is
+ * needed between them; seconds only matter for display.
  */
 export async function getTempo(client: Ableton): Promise<number> {
   try {
@@ -14,46 +15,31 @@ export async function getTempo(client: Ableton): Promise<number> {
   }
 }
 
-export function secToBeats(sec: number, tempo: number): number {
-  return (sec * tempo) / 60;
-}
-
-/**
- * Move the arrangement playhead to an absolute time (seconds).
- *
- * Units (verified empirically against Live 12.0.2 — do NOT "fix" by
- * converting): Song.jump_by takes RELATIVE SECONDS, same frame as
- * current_song_time and cue.time. No tempo conversion needed.
- */
-export async function jumpToTime(client: Ableton, sec: number): Promise<void> {
-  const target = Math.max(0, sec);
+/** Move the arrangement playhead to an absolute position (beats). */
+export async function jumpToTime(client: Ableton, beats: number): Promise<void> {
+  const target = Math.max(0, beats);
   const now = await client.song.get("current_song_time");
   const delta = target - now;
-  if (Math.abs(delta) > 0.01) {
+  if (Math.abs(delta) > 0.001) {
     await client.song.jumpBy(delta);
   }
 }
 
-/** Jump to a time and start playing from there. */
-export async function playFromTime(client: Ableton, sec: number): Promise<void> {
-  await jumpToTime(client, sec);
+/** Jump to a position and start playing from there. */
+export async function playFromTime(client: Ableton, beats: number): Promise<void> {
+  await jumpToTime(client, beats);
   await client.song.continuePlaying();
 }
 
-/**
- * Loop the given time range (seconds). Unlike jump_by, the loop brace
- * IS beats-based (it snaps to the beat grid in Live's UI), so seconds
- * are converted with the current tempo here.
- */
+/** Loop the given range of the arrangement (beats) and enable the loop. */
 export async function loopRange(
   client: Ableton,
-  startSec: number,
-  endSec: number,
+  startBeats: number,
+  endBeats: number,
 ): Promise<void> {
-  const tempo = await getTempo(client);
-  const startBeats = Math.max(0, secToBeats(startSec, tempo));
-  const lengthBeats = Math.max(1, secToBeats(endSec - startSec, tempo));
-  await client.song.set("loop_start", startBeats);
-  await client.song.set("loop_length", lengthBeats);
+  const start = Math.max(0, startBeats);
+  const length = Math.max(1, endBeats - start);
+  await client.song.set("loop_start", start);
+  await client.song.set("loop_length", length);
   await client.song.set("loop", true);
 }

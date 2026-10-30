@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { useAbleton } from "../lib/hooks";
 import { useLiveRawList, useLiveChildProp } from "../lib/list-hooks";
 import { colorToHex } from "../lib/color";
+import { toast } from "../lib/toast";
+import { EmptyPanel, LedKey, ViewStrip } from "../components/hw";
 
 interface PadBinding {
   trackId: string;
@@ -24,31 +26,44 @@ function loadBindings(): PadBinding[] {
 }
 
 function saveBindings(b: PadBinding[]) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(b));
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(b));
+  } catch {
+    // private mode / storage full — bindings stay for this session only
+  }
 }
 
 export function PadsView() {
   const client = useAbleton();
   const rawTracks = useLiveRawList<any>("song", "tracks");
+  const rawScenes = useLiveRawList<any>("song", "scenes");
   const [trackMap, setTrackMap] = useState<Map<string, any>>(new Map());
   const [bindings, setBindings] = useState<PadBinding[]>(loadBindings);
   const [editing, setEditing] = useState(false);
+  const [selected, setSelected] = useState<number | null>(null);
 
   useEffect(() => {
     if (!client || !rawTracks) return;
+    let cancelled = false;
     (async () => {
       try {
         const tracks = await client.song.get("tracks");
+        if (cancelled) return;
         const m = new Map<string, any>();
         for (const t of tracks) m.set(t.raw.id, t);
         setTrackMap(m);
-      } catch {}
+      } catch {
+        // ignore
+      }
     })();
+    return () => {
+      cancelled = true;
+    };
   }, [client, rawTracks]);
 
-  function handleBind(padIdx: number, trackId: string, sceneIdx: number) {
+  function setBinding(padIdx: number, b: PadBinding) {
     const next = [...bindings];
-    next[padIdx] = { trackId, sceneIdx };
+    next[padIdx] = b;
     setBindings(next);
     saveBindings(next);
   }
@@ -58,102 +73,113 @@ export function PadsView() {
     const b = bindings[padIdx];
     if (!b || !b.trackId || b.sceneIdx < 0) return;
     const track = trackMap.get(b.trackId);
-    if (!track) return;
+    if (!track) {
+      toast("El track de este pad ya no existe");
+      return;
+    }
     try {
       const slots = await track.get("clip_slots");
       const slot = slots[b.sceneIdx];
-      if (slot && (await slot.get("has_clip"))) {
-        await slot.fire();
-      }
+      // Like Live: launches a clip, or records into the slot if armed.
+      if (slot) await slot.fire();
     } catch {
-      // ignore
+      toast("No se pudo lanzar el pad");
     }
   }
 
-  if (!client) return <Empty>Sin conexión</Empty>;
+  /** Fill every pad from the Session grid: 8 tracks × 8 scenes. */
+  function autoMap() {
+    const ids = (rawTracks ?? []).map((t: any) => String(t.id)).slice(0, COLS);
+    const next: PadBinding[] = Array.from({ length: PADS }, (_, i) => {
+      const row = Math.floor(i / COLS);
+      const col = i % COLS;
+      const trackId = ids[col];
+      return trackId && row < (rawScenes?.length ?? ROWS) ? { trackId, sceneIdx: row } : { trackId: "", sceneIdx: -1 };
+    });
+    setBindings(next);
+    saveBindings(next);
+    toast("Pads asignados desde la Session");
+  }
+
+  if (!client) {
+    return <EmptyPanel title="Live no está conectado" hint="Abre Ableton Live con AbletonJS activo como Control Surface." />;
+  }
+
+  const bound = bindings.filter((b) => b.trackId).length;
 
   return (
     <div className="h-full flex flex-col">
-      <div
-        className="h-14 shrink-0 flex items-center px-5 gap-4"
-        style={{
-          background: "var(--color-surface-1)",
-          borderBottom: "1px solid var(--color-border)",
-        }}
-      >
-        <span
-          className="label-cap"
-          style={{ color: "var(--color-accent-play)" }}
-        >
-          Performance pads
-        </span>
-        <span
-          className="value-mono"
-          style={{ fontSize: 12, color: "var(--color-text-3)" }}
-        >
-          {COLS}×{ROWS} · {bindings.filter((b) => b.trackId).length} bound
+      <ViewStrip>
+        <span style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 16, letterSpacing: "0.06em" }}>Pads</span>
+        <span className="value-mono" style={{ fontSize: 12, color: "var(--color-text-3)" }}>
+          {bound} de {PADS} asignados
         </span>
         <div className="flex-1" />
-        <button
-          onClick={() => setEditing((e) => !e)}
-          className="tactile"
-          style={{
-            height: 36,
-            padding: "0 14px",
-            background: editing
-              ? "var(--color-accent-cue)"
-              : "var(--color-surface-2)",
-            color: editing
-              ? "var(--color-text-inverse)"
-              : "var(--color-text-1)",
-            fontWeight: 600,
-            fontSize: 13,
-            border: "1px solid var(--color-border)",
-            borderRadius: 8,
+        {editing && <LedKey size="sm" label="Auto 8×8" onClick={autoMap} title="Asignar las primeras 8 pistas × 8 escenas" />}
+        <LedKey
+          size="sm"
+          variant="dot"
+          color="cue"
+          active={editing}
+          label={editing ? "Listo" : "Asignar"}
+          onClick={() => {
+            setEditing((e) => !e);
+            setSelected(null);
           }}
-        >
-          {editing ? "Done" : "Edit bindings"}
-        </button>
-      </div>
+        />
+      </ViewStrip>
 
-      <div
-        className="flex-1 min-h-0 flex items-center justify-center"
-        style={{ background: "var(--color-bg)", padding: 24 }}
-      >
+      <div className="flex-1 min-h-0 flex items-center justify-center p-3 sm:p-6">
         <div
+          className="panel"
           style={{
-            display: "grid",
-            gridTemplateColumns: `repeat(${COLS}, 1fr)`,
-            gap: 8,
-            width: "min(720px, 100%)",
-            aspectRatio: "1 / 1",
+            padding: "clamp(10px, 2vw, 18px)",
+            width: "min(760px, 100%, calc(100vh - 290px))",
+            minWidth: 280,
+            borderRadius: 16,
           }}
         >
-          {bindings.map((b, i) => {
-            const track = b.trackId ? trackMap.get(b.trackId) : null;
-            return (
-              <Pad
-                key={i}
-                index={i}
-                track={track}
-                sceneIdx={b.sceneIdx}
-                onPress={() => !editing && firePad(i)}
-                editing={editing}
-              />
-            );
-          })}
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: `repeat(${COLS}, 1fr)`,
+              gap: "clamp(4px, 1vw, 8px)",
+              aspectRatio: "1 / 1",
+            }}
+          >
+            {bindings.map((b, i) => {
+              const track = b.trackId ? trackMap.get(b.trackId) : null;
+              return (
+                <Pad
+                  key={i}
+                  index={i}
+                  track={track}
+                  sceneIdx={b.sceneIdx}
+                  editing={editing}
+                  selected={editing && selected === i}
+                  onPress={() => {
+                    if (editing) setSelected(i);
+                    else void firePad(i);
+                  }}
+                />
+              );
+            })}
+          </div>
         </div>
       </div>
 
       {editing && (
         <BindingPicker
-          tracks={Array.from(trackMap.values())}
-          onPick={(trackId, sceneIdx) => {
-            // Assign to first unbound pad
-            const idx = bindings.findIndex((b) => !b.trackId);
-            if (idx === -1) return;
-            handleBind(idx, trackId, sceneIdx);
+          padIndex={selected}
+          current={selected !== null ? bindings[selected] : null}
+          tracks={(rawTracks ?? []).map((t: any) => ({ id: String(t.id), name: t.name || "—" }))}
+          sceneCount={rawScenes?.length ?? 0}
+          onBind={(b) => {
+            if (selected === null) return;
+            setBinding(selected, b);
+            setSelected(selected + 1 < PADS ? selected + 1 : null);
           }}
+          onClear={() => selected !== null && setBinding(selected, { trackId: "", sceneIdx: -1 })}
         />
       )}
     </div>
@@ -166,134 +192,111 @@ function Pad({
   sceneIdx,
   onPress,
   editing,
+  selected,
 }: {
   index: number;
   track: any;
   sceneIdx: number;
   onPress: () => void;
   editing: boolean;
+  selected: boolean;
 }) {
   const [pressed, setPressed] = useState(false);
   const color = useLiveChildProp<number>(track, "color");
   const name = useLiveChildProp<string>(track, "name");
-  const [clip, setClip] = useState<any>(null);
+  const [slot, setSlot] = useState<any>(null);
   useEffect(() => {
     if (!track || sceneIdx < 0) {
-      setClip(null);
+      setSlot(null);
       return;
     }
     let cancelled = false;
-    (async () => {
-      try {
-        const slots = await track.get("clip_slots");
-        if (cancelled) return;
-        const slot = slots[sceneIdx];
-        if (slot && (await slot.get("has_clip"))) {
-          const c = await slot.get("clip");
-          if (!cancelled) setClip(c);
-        } else {
-          setClip(null);
-        }
-      } catch {
-        setClip(null);
-      }
-    })();
+    track
+      .get("clip_slots")
+      .then((slots: any[]) => !cancelled && setSlot(slots[sceneIdx] ?? null))
+      .catch(() => !cancelled && setSlot(null));
     return () => {
       cancelled = true;
     };
   }, [track, sceneIdx]);
 
+  const hasClip = useLiveChildProp<boolean>(slot, "has_clip");
+  const [clip, setClip] = useState<any>(null);
+  useEffect(() => {
+    if (!slot || !hasClip) {
+      setClip(null);
+      return;
+    }
+    let cancelled = false;
+    slot
+      .get("clip")
+      .then((c: any) => !cancelled && setClip(c))
+      .catch(() => !cancelled && setClip(null));
+    return () => {
+      cancelled = true;
+    };
+  }, [slot, hasClip]);
+
   const clipColor = useLiveChildProp<number>(clip, "color", { pollMs: 2000 });
   const clipName = useLiveChildProp<string>(clip, "name", { pollMs: 2000 });
   const isPlaying = useLiveChildProp<boolean>(clip, "is_playing", { pollMs: 500 });
+  const isRecording = useLiveChildProp<boolean>(clip, "is_recording", { pollMs: 500 });
 
-  const baseColor = colorToHex(clipColor)
-    ?? colorToHex(color)
-    ?? "var(--color-surface-3)";
+  const bound = !!track && sceneIdx >= 0;
+  const hex = colorToHex(clipColor) ?? colorToHex(color);
+  const lit = !!isPlaying || !!isRecording;
+  const tint = isRecording ? "#ff3b3b" : hex;
+
+  // Silicone pad: dark when unbound, dimly backlit when bound,
+  // fully lit (with bloom) while its clip plays.
+  const background = !bound
+    ? "radial-gradient(circle at 50% 35%, #2c2e33 0%, #1d1f23 80%)"
+    : tint
+      ? lit
+        ? `radial-gradient(circle at 50% 40%, color-mix(in srgb, ${tint} 55%, white) 0%, ${tint} 55%, color-mix(in srgb, ${tint} 75%, black) 100%)`
+        : `radial-gradient(circle at 50% 40%, color-mix(in srgb, ${tint} ${hasClip ? 55 : 22}%, #2a2c31) 0%, color-mix(in srgb, ${tint} ${hasClip ? 32 : 12}%, #1b1c20) 100%)`
+      : "radial-gradient(circle at 50% 35%, #34373d 0%, #222428 80%)";
 
   return (
     <button
       onPointerDown={() => setPressed(true)}
       onPointerUp={() => setPressed(false)}
       onPointerLeave={() => setPressed(false)}
+      onPointerCancel={() => setPressed(false)}
       onClick={onPress}
+      aria-label={bound ? `Pad ${index + 1}: ${clipName ?? name ?? ""}` : `Pad ${index + 1} sin asignar`}
       style={{
-        background: pressed
-          ? `color-mix(in srgb, ${baseColor} 80%, white)`
-          : baseColor,
-        borderRadius: 10,
+        background,
+        borderRadius: "clamp(5px, 1vw, 9px)",
+        border: selected ? "2px solid var(--color-accent-cue)" : "1px solid rgba(0,0,0,0.7)",
         boxShadow: pressed
-          ? "var(--shadow-inset-pressed)"
-          : "var(--shadow-inset-soft)",
+          ? "inset 0 3px 8px rgba(0,0,0,0.7)"
+          : lit && tint
+            ? `inset 0 1px 0 rgba(255,255,255,0.4), 0 0 22px color-mix(in srgb, ${tint} 60%, transparent), 0 2px 4px rgba(0,0,0,0.6)`
+            : "inset 0 1px 0 rgba(255,255,255,0.08), inset 0 -2px 3px rgba(0,0,0,0.35), 0 2px 4px rgba(0,0,0,0.55)",
+        transform: pressed ? "scale(0.97)" : undefined,
         display: "flex",
         flexDirection: "column",
-        alignItems: "center",
-        justifyContent: "center",
-        gap: 2,
-        padding: 4,
+        alignItems: "flex-start",
+        justifyContent: "space-between",
+        padding: "clamp(3px, 0.8vw, 7px)",
         cursor: "pointer",
         touchAction: "manipulation",
         position: "relative",
         overflow: "hidden",
-        transition: "background 60ms var(--ease-instrument)",
+        minWidth: 0,
+        transition: "box-shadow 120ms var(--ease-instrument), background 120ms, transform 60ms",
       }}
     >
-      {isPlaying && (
-        <div
-          style={{
-            position: "absolute",
-            inset: 0,
-            border: "2px solid var(--color-accent-play)",
-            borderRadius: 10,
-            boxShadow: "0 0 12px var(--color-accent-play)",
-            pointerEvents: "none",
-          }}
-        />
-      )}
-      <span
-        className="value-mono"
-        style={{
-          fontSize: 10,
-          color: "rgba(0,0,0,0.5)",
-          fontWeight: 700,
-        }}
-      >
-        {String(index + 1).padStart(2, "0")}
+      <span className="value-mono" style={{ fontSize: 9, fontWeight: 700, color: lit ? "rgba(0,0,0,0.6)" : "rgba(233,229,218,0.35)" }}>
+        {index + 1}
       </span>
-      {clipName && (
+      {bound && (
         <span
-          className="truncate w-full text-center"
-          style={{
-            fontSize: 9,
-            color: "rgba(0,0,0,0.7)",
-            fontWeight: 600,
-            padding: "0 4px",
-          }}
+          className="truncate w-full text-left hidden sm:block"
+          style={{ fontSize: 10, fontWeight: 700, color: lit ? "rgba(0,0,0,0.75)" : "rgba(233,229,218,0.75)" }}
         >
-          {clipName}
-        </span>
-      )}
-      {!clip && name && (
-        <span
-          className="truncate w-full text-center"
-          style={{
-            fontSize: 9,
-            color: "rgba(255,255,255,0.7)",
-            fontWeight: 600,
-            padding: "0 4px",
-          }}
-        >
-          {name}
-        </span>
-      )}
-      {editing && !clip && (
-        <span
-          style={{
-            fontSize: 16,
-            color: "rgba(255,255,255,0.4)",
-          }}
-        >
-          +
+          {clipName ?? (editing ? `${name ?? "—"} · ${sceneIdx + 1}` : "")}
         </span>
       )}
     </button>
@@ -301,91 +304,76 @@ function Pad({
 }
 
 function BindingPicker({
+  padIndex,
+  current,
   tracks,
-  onPick,
+  sceneCount,
+  onBind,
+  onClear,
 }: {
-  tracks: any[];
-  onPick: (trackId: string, sceneIdx: number) => void;
+  padIndex: number | null;
+  current: PadBinding | null;
+  tracks: { id: string; name: string }[];
+  sceneCount: number;
+  onBind: (b: PadBinding) => void;
+  onClear: () => void;
 }) {
-  const [trackId, setTrackId] = useState(tracks[0]?.raw?.id ?? "");
-  const [sceneIdx, setSceneIdx] = useState(0);
+  const [trackId, setTrackId] = useState(tracks[0]?.id ?? "");
+  const [scene, setScene] = useState(1);
 
   useEffect(() => {
-    if (tracks.length > 0 && !tracks.find((t) => t.raw.id === trackId)) {
-      setTrackId(tracks[0].raw.id);
+    if (current?.trackId) {
+      setTrackId(current.trackId);
+      setScene(current.sceneIdx + 1);
     }
+  }, [current?.trackId, current?.sceneIdx]);
+
+  useEffect(() => {
+    if (tracks.length > 0 && !tracks.find((t) => t.id === trackId)) setTrackId(tracks[0].id);
   }, [tracks, trackId]);
 
   return (
     <div
-      className="fixed bottom-32 left-1/2 -translate-x-1/2 panel-raised"
-      style={{ padding: 16, zIndex: 20, maxWidth: "calc(100vw - 32px)", overflowX: "auto" }}
+      className="fixed left-1/2 -translate-x-1/2 panel-raised"
+      style={{ bottom: 116, padding: 14, zIndex: 20, maxWidth: "calc(100vw - 24px)", overflowX: "auto" }}
     >
-      <div className="flex items-center gap-3">
-        <span className="label-cap">Bind next pad:</span>
-        <select
-          value={trackId}
-          onChange={(e) => setTrackId(e.target.value)}
-          style={{
-            background: "var(--color-surface-2)",
-            color: "var(--color-text-1)",
-            border: "1px solid var(--color-border)",
-            borderRadius: 6,
-            padding: "6px 10px",
-            fontSize: 13,
-            fontFamily: "var(--font-sans)",
-          }}
-        >
-          {tracks.map((t) => (
-            <option key={t.raw.id} value={t.raw.id}>
-              {t.raw.name || "—"}
-            </option>
-          ))}
-        </select>
-        <input
-          type="number"
-          min={0}
-          max={63}
-          value={sceneIdx}
-          onChange={(e) => setSceneIdx(Number(e.target.value))}
-          style={{
-            width: 60,
-            background: "var(--color-surface-2)",
-            color: "var(--color-text-1)",
-            border: "1px solid var(--color-border)",
-            borderRadius: 6,
-            padding: "6px 10px",
-            fontSize: 13,
-            fontFamily: "var(--font-mono)",
-            textAlign: "center",
-          }}
-        />
-        <button
-          onClick={() => trackId && onPick(trackId, sceneIdx)}
-          className="tactile"
-          style={{
-            height: 32,
-            padding: "0 14px",
-            background: "var(--color-accent-play)",
-            color: "var(--color-text-inverse)",
-            fontWeight: 600,
-            fontSize: 12,
-            borderRadius: 6,
-          }}
-        >
-          Bind
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function Empty({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="h-full flex items-center justify-center">
-      <span className="label-cap" style={{ color: "var(--color-text-3)" }}>
-        {children}
-      </span>
+      {padIndex === null ? (
+        <span style={{ fontSize: 14, color: "var(--color-text-2)" }}>Toca un pad para asignarle un clip.</span>
+      ) : (
+        <div className="flex items-center gap-2.5 flex-wrap">
+          <span style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 15 }}>Pad {padIndex + 1}</span>
+          <label className="flex items-center gap-1.5">
+            <span className="label-cap" style={{ fontSize: 10 }}>Track</span>
+            <select
+              value={trackId}
+              onChange={(e) => setTrackId(e.target.value)}
+              style={{ border: "1px solid rgba(0,0,0,0.6)", borderRadius: 6, padding: "7px 10px", fontSize: 14, maxWidth: 180 }}
+            >
+              {tracks.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex items-center gap-1.5">
+            <span className="label-cap" style={{ fontSize: 10 }}>Escena</span>
+            <select
+              value={scene}
+              onChange={(e) => setScene(Number(e.target.value))}
+              style={{ border: "1px solid rgba(0,0,0,0.6)", borderRadius: 6, padding: "7px 10px", fontSize: 14 }}
+            >
+              {Array.from({ length: Math.max(1, sceneCount) }, (_, i) => (
+                <option key={i} value={i + 1}>
+                  {i + 1}
+                </option>
+              ))}
+            </select>
+          </label>
+          <LedKey size="sm" color="play" active label="Asignar" onClick={() => trackId && onBind({ trackId, sceneIdx: scene - 1 })} />
+          <LedKey size="sm" label="Vaciar" onClick={onClear} />
+        </div>
+      )}
     </div>
   );
 }

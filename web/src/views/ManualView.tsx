@@ -37,10 +37,12 @@ const SECTIONS: Section[] = [
           <li><strong>◀◀ / ▶▶</strong> — saltar a la marca (cue) anterior / siguiente del arrangement.</li>
           <li><strong>STOP (■)</strong> — para la reproducción.</li>
           <li><strong>PLAY (▶ grande)</strong> — reproduce / pausa. Se ilumina verde sonando.</li>
-          <li><strong>REC (●)</strong> — activa/desactiva grabación de sesión. Rojo = grabando.</li>
+          <li><strong>REC (●)</strong> — el botón de grabación principal de Live (grabar en el arreglo). Si el transporte está parado, arranca a grabar. El anillo rojo parpadea mientras graba.</li>
+          <li><strong>SESSION (● en cuadro)</strong> — Session Record: graba clips nuevos en los tracks armados (R).</li>
           <li><strong>LOOP</strong> — repite el rango del arrangement.</li>
           <li><strong>CLICK</strong> — metrónomo.</li>
-          <li><strong>Tempo (dial + número)</strong> — arrastra verticalmente el círculo para cambiar BPM. El número muestra el tempo con 2 decimales.</li>
+          <li><strong>OVR</strong> — overdub del arreglo (en pantallas anchas).</li>
+          <li><strong>Tempo (display ámbar)</strong> — arrastra hacia arriba/abajo sobre el número para cambiar BPM: lento = décimas, rápido = BPM enteros. Doble toque redondea. <strong>TAP</strong> marca el tempo a mano.</li>
         </ul>
       </>
     ),
@@ -57,13 +59,13 @@ const SECTIONS: Section[] = [
         <ul>
           <li><strong>Tocar una celda con color</strong> = lanzar ese clip (respeta tu quantización de lanzamiento).</li>
           <li><strong>Columna derecha (Scene 1, 2…)</strong> = disparar TODA la fila de una vez.</li>
-          <li><strong>Celdas con +</strong> = slot vacío, no hacen nada.</li>
-          <li><strong>Borde verde</strong> = sonando. <strong>Rojo pulsante</strong> = grabando. <strong>Punto amarillo</strong> = disparado, entra en el próximo beat.</li>
+          <li><strong>Celdas vacías</strong> = igual que en Live: si el track está armado (R), tocarla <strong>empieza a grabar un clip ahí</strong>; si no, para lo que suene en ese track.</li>
+          <li><strong>Clip encendido con borde blanco y ▶ brillante</strong> = sonando. <strong>Borde rojo y punto parpadeando</strong> = grabando. <strong>▶ parpadeando</strong> = disparado, entra en el próximo tiempo de lanzamiento.</li>
           <li><strong>■ en el header del track</strong> = parar lo que suene en ese track.</li>
           <li><strong>Botón Borrar</strong> (arriba) = modo editar: los clips y scenes se marcan en rojo y <strong>tocarlos los elimina de Live</strong>. Toca <strong>Listo</strong> para salir. Nada se borra sin entrar a este modo a propósito.</li>
           <li><strong>Mantener presionado un clip sonando</strong> (click derecho / long-press) = pararlo.</li>
           <li><strong>M / S / R</strong> del header = mute, solo, arm. En tracks de grupo la <strong>R no aparece</strong> (Live no permite armarlos).</li>
-          <li>El mini-fader del header es el volumen; las barritas verdes son el medidor real.</li>
+          <li>El mini-fader del header es el volumen (doble toque = 0 dB); los LED verdes son el medidor real.</li>
         </ul>
         <p>Tip de escenario: deja esta vista abierta durante el set — ves de un vistazo qué suena en cada track.</p>
       </>
@@ -75,9 +77,11 @@ const SECTIONS: Section[] = [
       <>
         <p>
           64 pads reasignables para disparar clips sin mirar la cuadrícula.
-          Toca <strong>Edit bindings</strong>, elige track + número de scene
-          y <strong>Bind</strong>: se asigna al primer pad libre. Cada pad
-          muestra el color y nombre del clip y se ilumina sonando.
+          Toca <strong>Asignar</strong>, luego toca el pad que quieras, elige
+          track y escena y pulsa <strong>Asignar</strong> (salta solo al pad
+          siguiente). <strong>Vaciar</strong> lo libera y <strong>Auto 8×8</strong>
+          copia las primeras 8 pistas × 8 escenas de la Session. Cada pad se
+          retroilumina con el color del clip y brilla mientras suena.
         </p>
       </>
     ),

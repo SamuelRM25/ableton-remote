@@ -4,10 +4,24 @@ import { useLiveRawList, useLiveChildProp } from "../lib/list-hooks";
 import { colorToHex } from "../lib/color";
 import { toast } from "../lib/toast";
 import { EmptyPanel, LedKey, ViewStrip } from "../components/hw";
+import { SongPads } from "../components/SongPads";
 
 interface PadBinding {
   trackId: string;
   sceneIdx: number;
+  /** Track name: Live's ids change on every restart, the name doesn't. */
+  trackName?: string;
+}
+
+const MODE_KEY = "ableton-remote.pads.mode";
+type PadsMode = "free" | "song";
+
+function loadMode(): PadsMode {
+  try {
+    return localStorage.getItem(MODE_KEY) === "song" ? "song" : "free";
+  } catch {
+    return "free";
+  }
 }
 
 const STORAGE_KEY = "ableton-remote.pads.v1";
@@ -35,6 +49,28 @@ function saveBindings(b: PadBinding[]) {
 
 export function PadsView() {
   const client = useAbleton();
+  const [mode, setModeState] = useState<PadsMode>(loadMode);
+  const setMode = (m: PadsMode) => {
+    setModeState(m);
+    try {
+      localStorage.setItem(MODE_KEY, m);
+    } catch {
+      // ignore
+    }
+  };
+  const modeSwitch = (
+    <div className="flex items-center gap-1.5">
+      <span style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 16, letterSpacing: "0.06em", marginRight: 6 }}>Pads</span>
+      <LedKey size="sm" variant="ring" color="cue" active={mode === "song"} label="Canción" onClick={() => setMode("song")} />
+      <LedKey size="sm" variant="ring" color="cue" active={mode === "free"} label="Libre 8×8" onClick={() => setMode("free")} />
+    </div>
+  );
+  if (client && mode === "song") return <SongPads client={client} modeSwitch={modeSwitch} />;
+  return <FreePads modeSwitch={modeSwitch} />;
+}
+
+function FreePads({ modeSwitch }: { modeSwitch: React.ReactNode }) {
+  const client = useAbleton();
   const rawTracks = useLiveRawList<any>("song", "tracks");
   const rawScenes = useLiveRawList<any>("song", "scenes");
   const [trackMap, setTrackMap] = useState<Map<string, any>>(new Map());
@@ -50,7 +86,11 @@ export function PadsView() {
         const tracks = await client.song.get("tracks");
         if (cancelled) return;
         const m = new Map<string, any>();
-        for (const t of tracks) m.set(t.raw.id, t);
+        for (const t of tracks) {
+          m.set(t.raw.id, t);
+          // Also index by name so bindings survive a Live restart.
+          if (t.raw.name && !m.has(`name:${t.raw.name}`)) m.set(`name:${t.raw.name}`, t);
+        }
         setTrackMap(m);
       } catch {
         // ignore
@@ -72,7 +112,7 @@ export function PadsView() {
     if (!client) return;
     const b = bindings[padIdx];
     if (!b || !b.trackId || b.sceneIdx < 0) return;
-    const track = trackMap.get(b.trackId);
+    const track = resolveTrack(trackMap, b);
     if (!track) {
       toast("El track de este pad ya no existe");
       return;
@@ -94,7 +134,8 @@ export function PadsView() {
       const row = Math.floor(i / COLS);
       const col = i % COLS;
       const trackId = ids[col];
-      return trackId && row < (rawScenes?.length ?? ROWS) ? { trackId, sceneIdx: row } : { trackId: "", sceneIdx: -1 };
+      const trackName = (rawTracks ?? []).find((t: any) => String(t.id) === trackId)?.name;
+      return trackId && row < (rawScenes?.length ?? ROWS) ? { trackId, sceneIdx: row, trackName } : { trackId: "", sceneIdx: -1 };
     });
     setBindings(next);
     saveBindings(next);
@@ -110,8 +151,8 @@ export function PadsView() {
   return (
     <div className="h-full flex flex-col">
       <ViewStrip>
-        <span style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 16, letterSpacing: "0.06em" }}>Pads</span>
-        <span className="value-mono" style={{ fontSize: 12, color: "var(--color-text-3)" }}>
+        {modeSwitch}
+        <span className="value-mono hidden md:inline" style={{ fontSize: 12, color: "var(--color-text-3)" }}>
           {bound} de {PADS} asignados
         </span>
         <div className="flex-1" />
@@ -148,7 +189,7 @@ export function PadsView() {
             }}
           >
             {bindings.map((b, i) => {
-              const track = b.trackId ? trackMap.get(b.trackId) : null;
+              const track = b.trackId ? resolveTrack(trackMap, b) : null;
               return (
                 <Pad
                   key={i}
@@ -176,7 +217,8 @@ export function PadsView() {
           sceneCount={rawScenes?.length ?? 0}
           onBind={(b) => {
             if (selected === null) return;
-            setBinding(selected, b);
+            const trackName = (rawTracks ?? []).find((t: any) => String(t.id) === b.trackId)?.name;
+            setBinding(selected, { ...b, trackName });
             setSelected(selected + 1 < PADS ? selected + 1 : null);
           }}
           onClear={() => selected !== null && setBinding(selected, { trackId: "", sceneIdx: -1 })}
@@ -184,6 +226,10 @@ export function PadsView() {
       )}
     </div>
   );
+}
+
+function resolveTrack(map: Map<string, any>, b: PadBinding): any | null {
+  return map.get(b.trackId) ?? (b.trackName ? map.get(`name:${b.trackName}`) : null) ?? null;
 }
 
 function Pad({
@@ -239,8 +285,9 @@ function Pad({
 
   const clipColor = useLiveChildProp<number>(clip, "color", { pollMs: 2000 });
   const clipName = useLiveChildProp<string>(clip, "name", { pollMs: 2000 });
-  const isPlaying = useLiveChildProp<boolean>(clip, "is_playing", { pollMs: 500 });
-  const isRecording = useLiveChildProp<boolean>(clip, "is_recording", { pollMs: 500 });
+  const playingSlot = useLiveChildProp<number>(track, "playing_slot_index");
+  const isPlaying = playingSlot === sceneIdx && sceneIdx >= 0;
+  const isRecording = useLiveChildProp<boolean>(isPlaying ? clip : null, "is_recording", { pollMs: 400 });
 
   const bound = !!track && sceneIdx >= 0;
   const hex = colorToHex(clipColor) ?? colorToHex(color);

@@ -1,8 +1,10 @@
 import hashlib
 import json
+import time
 
 from ..Config import DEBUG
 from ..Logging import logger
+from ..Socket import PRIORITY_BULK
 
 
 class ConnectionSubscribers:
@@ -35,9 +37,41 @@ class ConnectionSubscribers:
             socket.send_to(conn, event_id, data)
 
 
+# Listener props that Live fires many times per second and whose only
+# useful value is the latest one. They are coalesced and sent at most
+# THROTTLE_SECONDS apart, on the bulk lane, instead of one frame per change.
+THROTTLED_SUFFIXES = ("meter_left", "meter_right", "meter_level", "playing_position")
+THROTTLE_SECONDS = 0.033  # ~30 updates per second: smooth, and cheap for Live
+
+
 class Interface:
     listeners = {}  # noqa: RUF012
     obj_ids = {}  # noqa: RUF012
+    _dirty = {}  # noqa: RUF012  key -> True for throttled listeners with news
+    _last_flush = 0.0
+
+    @staticmethod
+    def flush_throttled(socket):
+        if not Interface._dirty:
+            return
+        now = time.time()
+        if now - Interface._last_flush < THROTTLE_SECONDS:
+            return
+        Interface._last_flush = now
+        dirty = list(Interface._dirty.keys())
+        Interface._dirty.clear()
+        for key in dirty:
+            entry = Interface.listeners.get(key)
+            if not entry:
+                continue
+            try:
+                value = entry["iface"].get_prop(entry["ns"], entry["prop"])
+            except Exception:
+                continue
+            if isinstance(value, float):
+                value = round(value, 3)
+            for conn, event_id in entry["subscribers"].items():
+                socket.send_to(conn, event_id, value, priority=PRIORITY_BULK)
 
     @staticmethod
     def save_obj(obj):
@@ -127,7 +161,12 @@ class Interface:
         subscribers = ConnectionSubscribers()
         subscribers.subscribe(connection, eventId)
 
+        throttled = prop.endswith(THROTTLED_SUFFIXES)
+
         def fn():
+            if throttled:
+                Interface._dirty[key] = True
+                return
             value = self.get_prop(ns, prop)
             entry = self.listeners.get(key)
             if not entry:
@@ -143,6 +182,7 @@ class Interface:
                 "subscribers": subscribers,
                 "ns": ns,
                 "prop": prop,
+                "iface": self,
             }
         except Exception as e:
             raise Exception(f"Listener {prop} could not be attached: {e}")

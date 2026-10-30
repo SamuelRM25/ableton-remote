@@ -39,7 +39,7 @@ DIRECT_SEND_MAX_BYTES = 65536
 # block. Sends can happen synchronously on Live's own main thread (e.g. a
 # listener callback pushing a property change), so without this a slow or
 # stalled client could otherwise freeze the whole application indefinitely.
-SOCKET_TIMEOUT_SECONDS = 3.0
+SOCKET_TIMEOUT_SECONDS = 10.0
 
 # Push events (property-change listeners) are latency-sensitive UI state and
 # should jump ahead of queued command results, which the client is already
@@ -48,6 +48,10 @@ SOCKET_TIMEOUT_SECONDS = 3.0
 # of result frames.
 PRIORITY_HIGH = 0
 PRIORITY_LOW = 1
+# Meters and playheads: dozens of values per second that are only ever
+# "latest wins". They go last so a burst of them can never delay a button
+# press, a command result or a state change (play, mute, clip launch…).
+PRIORITY_BULK = 2
 
 # Upper bound for how many bytes the send thread bundles into one sendall.
 MAX_BATCH_BYTES = 1024 * 1024
@@ -222,13 +226,13 @@ class Socket:
             self._last_error = msg
             logger.error(msg)
 
-    def send_to(self, connection, name, obj=None, uuid=None):
-        self._send_json(name, obj, uuid, connection)
+    def send_to(self, connection, name, obj=None, uuid=None, priority=None):
+        self._send_json(name, obj, uuid, connection, priority)
 
-    def broadcast(self, name, obj=None, uuid=None):
-        self._send_json(name, obj, uuid, None)
+    def broadcast(self, name, obj=None, uuid=None, priority=None):
+        self._send_json(name, obj, uuid, None, priority)
 
-    def _send_json(self, name, obj, uuid, connection):
+    def _send_json(self, name, obj, uuid, connection, priority=None):
         def jsonReplace(o):
             try:
                 return list(o)
@@ -239,7 +243,11 @@ class Socket:
         # Command responses are matched by uuid on the client and it's
         # already waiting on that promise, so they can queue behind push
         # events, which drive live UI state and are latency-sensitive.
-        priority = PRIORITY_LOW if name in ("result", "error") else PRIORITY_HIGH
+        # Results, errors and state pushes share the fast lane in arrival
+        # order (the user is waiting on all of them); only bulk streams such
+        # as meters are pushed to the back.
+        if priority is None:
+            priority = PRIORITY_HIGH
 
         try:
             data = json.dumps(
@@ -303,7 +311,22 @@ class Socket:
                 pass
             self._socket = None
 
+    # Called after every process() pass (set by AbletonJS) to flush
+    # throttled listener values such as meters.
+    after_process = None
+
     def process(self):
+        try:
+            self._process_queue()
+        finally:
+            if self.after_process is not None:
+                try:
+                    self.after_process()
+                except Exception as e:
+                    logger.error("Error flushing throttled listeners:")
+                    logger.exception(e)
+
+    def _process_queue(self):
         while True:
             try:
                 connection, payload = self._queue.get_nowait()

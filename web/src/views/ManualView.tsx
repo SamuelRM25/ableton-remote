@@ -76,7 +76,24 @@ const SECTIONS: Section[] = [
     body: (
       <>
         <p>
-          64 pads reasignables para disparar clips sin mirar la cuadrícula.
+          Hay dos modos arriba: <strong>Canción</strong> y <strong>Libre 8×8</strong>.
+        </p>
+        <p>
+          <strong>Canción</strong>: pensado para sets con una pista de canciones
+          (un clip MIDI vacío por canción, con su nombre) y una pista de partes
+          (clips vacíos llamados Intro, Verso, Coro…). En <strong>Pistas</strong>
+          eliges cuál es cada una. Arriba aparecen tus canciones; al elegir una,
+          los pads muestran sus partes: los clips de la pista de partes desde la
+          escena de la canción hasta la siguiente canción. Con
+          <strong> Elegir partes</strong> las escoges a mano y en el orden que
+          quieras (se guarda por canción; <strong>Automático</strong> vuelve al
+          modo por escenas). <strong>Seguir a Live</strong> cambia de canción
+          sola cuando Live toca otra. El pad que suena brilla, el que está en
+          cola parpadea y el siguiente aparece con borde punteado. En Pistas
+          eliges si el pad lanza solo el clip o la escena completa.
+        </p>
+        <p>
+          <strong>Libre 8×8</strong>: 64 pads reasignables para disparar clips sin mirar la cuadrícula.
           Toca <strong>Asignar</strong>, luego toca el pad que quieras, elige
           track y escena y pulsa <strong>Asignar</strong> (salta solo al pad
           siguiente). <strong>Vaciar</strong> lo libera y <strong>Auto 8×8</strong>

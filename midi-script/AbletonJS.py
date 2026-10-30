@@ -99,6 +99,9 @@ class AbletonJS(ControlSurface):
         self._last_tick = time.time() * 1000
         self.tick()
 
+        # Meters & playheads are coalesced and flushed after each pass.
+        self.socket.after_process = lambda: Interface.flush_throttled(self.socket)
+
         self.recv_loop = Live.Base.Timer(
             callback=self.socket.process, interval=1, repeat=True
         )

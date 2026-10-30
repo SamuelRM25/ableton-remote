@@ -65,8 +65,11 @@ export function ClipCell({ client, track, sceneIdx, editMode }: Props) {
   // Playing state is additionally derived from track.playing_slot_index.
   const name = useLiveChildProp<string>(clip, "name", { pollMs: 2000 });
   const color = useLiveChildProp<number>(clip, "color", { pollMs: 2000 });
-  const clipIsPlaying = useLiveChildProp<boolean>(clip, "is_playing", { pollMs: 500 });
-  const clipIsRecording = useLiveChildProp<boolean>(clip, "is_recording", { pollMs: 500 });
+  // Playing state comes from the track's playing_slot_index (one listener
+  // per track) instead of polling every clip. Recording can only happen in
+  // the slot that is playing, so only that one clip is ever asked.
+  const clipIsPlaying = isPlayingThis;
+  const clipIsRecording = useLiveChildProp<boolean>(isPlayingThis ? clip : null, "is_recording", { pollMs: 400 });
 
   const colorHex = colorToHex(color);
 

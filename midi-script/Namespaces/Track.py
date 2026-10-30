@@ -122,6 +122,25 @@ class Track(Interface):
     def get_clip_slots(self, ns):
         return map(ClipSlot.serialize_clip_slot, ns.clip_slots)
 
+    def get_session_clips(self, ns):
+        """Every clip in this track's Session column, in one round trip:
+        [{scene, name, color, clip_id, slot_id}]. Used by the song/parts pads."""
+        out = []
+        for index, slot in enumerate(ns.clip_slots):
+            if not slot.has_clip:
+                continue
+            clip = slot.clip
+            out.append(
+                {
+                    "scene": index,
+                    "name": clip.name,
+                    "color": clip.color,
+                    "clip_id": Interface.save_obj(clip),
+                    "slot_id": Interface.save_obj(slot),
+                }
+            )
+        return out
+
     def get_current_monitoring_state(self, ns):
         return str(ns.current_monitoring_state)
 

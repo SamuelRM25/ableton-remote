@@ -152,6 +152,13 @@ npm run dev
 
 El plugin `web/vite-plugins/ableton-ws-bridge.ts` añade un servidor WebSocket al puerto de Vite, distingue upgrades HMR (subprotocolo `vite-hmr`) de upgrades de ableton-js, y reenvía estos últimos a `ws://127.0.0.1:39031`. En producción este puente no existe: Live sirve la SPA y el WebSocket en el mismo origen (39031).
 
+## Conexión estable y baja latencia
+
+- **Medidores sin atascos**: el MIDI script junta los valores de medidores y posición de reproducción y los manda como máximo 30 veces por segundo, por un carril de baja prioridad. Así nunca retrasan un botón, el resultado de un comando ni un cambio de estado (play, mute, clip lanzado).
+- **Sin polling por clip**: el estado "sonando" sale de `playing_slot_index` del track (un listener por track) en vez de preguntarle a cada clip cada 500 ms.
+- **Live colgado ≠ desconexión**: los comandos y el heartbeat esperan hasta 10 s antes de dar la conexión por perdida (cargar un set pesado congela Live unos segundos). Un corte real de red se detecta al instante y la app se reconecta sola en ~250 ms.
+- **Pantalla siempre encendida**: la app pide *wake lock* para que el iPad no se bloquee (al bloquearse, Safari mata la conexión). Aun así, para escenario: Ajustes → Pantalla → Bloqueo automático → Nunca, o usa Acceso guiado.
+
 ## Las 9 vistas
 
 | Vista          | Qué hace                                                                                  |

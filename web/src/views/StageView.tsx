@@ -48,6 +48,10 @@ export function StageView({ standalone }: { standalone?: boolean }) {
     } else if (playing && st.nextSong) {
       next = `→ ${st.nextSong.name}`;
     }
+    // Arrangement clips have an end: count the bars left in this part.
+    if (playing?.end !== undefined && clock.isPlaying) {
+      barsLeft = Math.max(0, Math.ceil((playing.end - clock.beats) / barQ - 1e-6));
+    }
   } else if (cues && cues.length > 0) {
     const sorted = [...cues].sort((a, b) => Number(a.time) - Number(b.time));
     const pos = clock.beats + 0.001;

@@ -4,6 +4,7 @@ import { IconClick, IconLoop, IconPlay, IconRecord, IconStop } from "./icons";
 import { TempoDial } from "./TempoDial";
 import { LedKey, glow } from "./hw";
 import { toast } from "../lib/toast";
+import { takeArmedStart } from "../lib/cue-jump";
 
 async function safeRun(fn: () => Promise<unknown>, label: string) {
   try {
@@ -81,6 +82,7 @@ export function TransportBar() {
           client &&
           void safeRun(async () => {
             // Second press while stopped returns to the start, like Live.
+            takeArmedStart();
             await client.song.stopPlaying();
           }, "parar")
         }
@@ -97,7 +99,14 @@ export function TransportBar() {
         onPress={() =>
           client &&
           void safeRun(
-            () => (isPlaying ? client.song.stopPlaying() : client.song.startPlaying()),
+            () =>
+              isPlaying
+                ? client.song.stopPlaying()
+                : // After choosing a marker while stopped, play from IT
+                  // (Live's start_playing would use the start marker).
+                  takeArmedStart() !== null
+                  ? client.song.continuePlaying()
+                  : client.song.startPlaying(),
             isPlaying ? "pausar" : "reproducir",
           )
         }

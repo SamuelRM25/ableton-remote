@@ -12,6 +12,12 @@ const KNOWN_NON_LISTENABLE = new Set<string>([
   "mixer-device:cue_volume",
   "device-parameter:value_string",
   "track:can_be_armed",
+  "device-parameter:min",
+  "device-parameter:max",
+  "device-parameter:is_quantized",
+  "device-parameter:value_items",
+  "device:type",
+  "device:class_name",
 ]);
 
 const failedListeners = new Set<string>(KNOWN_NON_LISTENABLE);
@@ -193,19 +199,26 @@ export function useLiveChildProp<T = any>(
     const { prop: p, opts: o } = ref.current;
     const listen = o?.listen ?? true;
     const pollMs = o?.pollMs ?? 0;
-    const key = `${ns.ns ?? "ns"}:${p}`;
+    // Type-level "never listenable" props, plus per-object failures (a MIDI
+    // track has no meters, an audio track does — one must not disable the
+    // other).
+    const typeKey = `${ns.ns ?? "ns"}:${p}`;
+    const objKey = `${ns.ns ?? "ns"}:${ns.raw?.id ?? ns.nsid ?? "?"}:${p}`;
 
     (async () => {
       try {
         const initial = await ns.get(p);
         if (!cancelled) setIfChanged(initial as T);
       } catch {
-        // ignore
+        // The object doesn't have this prop at all (master has no mute, a
+        // MIDI track has no meters): don't ask Live again for a listener.
+        failedListeners.add(objKey);
+        return;
       }
       if (cancelled) return;
 
       let listening = false;
-      if (listen && !failedListeners.has(key)) {
+      if (listen && !failedListeners.has(typeKey) && !failedListeners.has(objKey)) {
         try {
           const unsub = await ns.addListener(p, (next: T) => {
             if (!cancelled) setIfChanged(next);
@@ -217,7 +230,7 @@ export function useLiveChildProp<T = any>(
             listening = true;
           }
         } catch {
-          failedListeners.add(key);
+          failedListeners.add(objKey);
         }
       }
       if (!listening && pollMs > 0 && !cancelled) {

@@ -193,10 +193,14 @@ function MixerStrip({
 }) {
   const name = useLiveChildProp<string>(track, "name");
   const color = useLiveChildProp<number>(track, "color");
-  const mute = useLiveChildProp<boolean>(track, "mute");
-  const solo = useLiveChildProp<boolean>(track, "solo");
-  const arm = useLiveChildProp<boolean>(track, "arm");
-  const canArm = useLiveChildProp<boolean>(track, "can_be_armed");
+  // Master has no mute/solo/arm and returns have no arm: don't even ask
+  // Live (each refused request is an error in Live's log and a wasted trip).
+  const channel = isMaster ? null : track;
+  const armable = isMaster || isReturn ? null : track;
+  const mute = useLiveChildProp<boolean>(channel, "mute");
+  const solo = useLiveChildProp<boolean>(channel, "solo");
+  const arm = useLiveChildProp<boolean>(armable, "arm");
+  const canArm = useLiveChildProp<boolean>(armable, "can_be_armed");
   const meterL = useLiveChildProp<number>(track, "output_meter_left");
   const meterR = useLiveChildProp<number>(track, "output_meter_right");
   const [sendsOpen, setSendsOpen] = useState(false);
@@ -211,7 +215,7 @@ function MixerStrip({
   const [livePanning, setLivePanning] = useMixerParam(mixer, "panning");
   const [volume, setVolume] = useOptimistic<number>(liveVolume, setLiveVolume);
   const [panning, setPanning] = useOptimistic<number>(livePanning, setLivePanning);
-  const sends = useSends(mixer);
+  const sends = useSends(isMaster ? null : mixer);
 
   useEffect(
     () => () => {

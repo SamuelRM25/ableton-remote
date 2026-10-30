@@ -14,6 +14,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { Ableton } from "ableton-js";
 import { createStore, useStore } from "./store";
 import { useLiveRawList } from "./list-hooks";
+import { useSongClock } from "./clock";
 
 /* ------------------------------------------------------------------ */
 /* Config (persisted) + current selection (shared by every view)       */
@@ -21,6 +22,7 @@ import { useLiveRawList } from "./list-hooks";
 
 export interface PartRef {
   name: string;
+  /** Position: scene index (Session) or start in beats (Arrangement). */
   scene: number;
 }
 
@@ -51,14 +53,18 @@ function loadConfig(): SongConfig {
 
 interface SongStore {
   config: SongConfig;
-  selectedScene: number | null;
+  /** Key of the selected song clip. */
+  selectedKey: string | null;
+  /** Arrangement mode: part we're about to jump to (waiting for the 1). */
+  pendingKey: string | null;
   setConfig(c: SongConfig): void;
-  select(scene: number | null): void;
+  select(key: string | null): void;
 }
 
 export const songStore = createStore<SongStore>((set) => ({
   config: loadConfig(),
-  selectedScene: null,
+  selectedKey: null,
+  pendingKey: null,
   setConfig(c) {
     try {
       localStorage.setItem(CONFIG_KEY, JSON.stringify(c));
@@ -70,8 +76,8 @@ export const songStore = createStore<SongStore>((set) => ({
     // iPad or phone — e.g. the Stage screen — uses the same tracks/parts.
     if (liveClient) void liveClient.song.setData(LIVE_DATA_KEY, c as any).catch(() => {});
   },
-  select(scene) {
-    set({ selectedScene: scene });
+  select(key) {
+    set({ selectedKey: key });
   },
 }));
 
@@ -79,88 +85,155 @@ export const songStore = createStore<SongStore>((set) => ({
 /* Live data                                                           */
 /* ------------------------------------------------------------------ */
 
-export interface SessionClip {
-  scene: number;
+/**
+ * One song or part clip. Works for both places a clip can live:
+ *   - Session: `scene` = row index, launched by firing its slot.
+ *   - Arrangement: `start`/`end` in beats, "launched" by moving the playhead.
+ */
+export interface SongItem {
+  key: string;
   name: string;
   color: number | null;
-  clip_id: string;
-  slot_id: string;
+  source: "session" | "arrangement";
+  /** Sort position: scene index (Session) or start beat (Arrangement). */
+  pos: number;
+  /** Session row (−1 in Arrangement). */
+  scene: number;
+  /** Arrangement range in beats (undefined in Session). */
+  start?: number;
+  end?: number;
+  slot_id?: string;
 }
 
+/** Kept for older imports. */
+export type SessionClip = SongItem;
+
 export type ClipsState =
-  | { kind: "loading" }
-  | { kind: "ready"; clips: SessionClip[] }
+  | { kind: "loading"; since: number }
+  | { kind: "ready"; clips: SongItem[]; source: "session" | "arrangement" | "none" }
   | { kind: "error"; message: string };
 
+interface CacheEntry {
+  clips: SongItem[];
+  source: "session" | "arrangement" | "none";
+}
+
 /** Last good reading per track name, so switching views is instant. */
-const clipCache = new Map<string, SessionClip[]>();
+const clipCache = new Map<string, CacheEntry>();
+
+const READ_TIMEOUT_MS = 8000;
+
+function withTimeout<T>(p: Promise<T>, ms: number, what: string): Promise<T> {
+  return new Promise((res, rej) => {
+    const t = window.setTimeout(() => rej(new Error(`Live tardó más de ${ms / 1000} s en ${what}`)), ms);
+    p.then(
+      (v) => {
+        window.clearTimeout(t);
+        res(v);
+      },
+      (e) => {
+        window.clearTimeout(t);
+        rej(e);
+      },
+    );
+  });
+}
 
 /**
- * All clips of one track's Session column.
- *
- * - One request with the MIDI script's `session_clips`. Older scripts fall
- *   back to reading the slots, all in ONE batched round trip (ableton-js
- *   bundles every command issued in the same tick into one envelope).
- * - Never overlaps reads: a slow Live can't pile requests on itself.
- * - Keeps showing the last good list while refreshing or reconnecting
- *   (this is what used to leave the view stuck on "Leyendo clips…").
+ * Every clip on one track: the Session column first; if it has none, the
+ * Arrangement. Never overlaps reads, keeps the last good list while
+ * refreshing, and always resolves to ready/error (an EMPTY track used to
+ * leave the view stuck on "Leyendo clips…" forever).
  */
-export function useSessionClips(client: Ableton | null, trackId: string | null, trackName: string): ClipsState {
+export function useTrackClips(client: Ableton | null, trackId: string | null, trackName: string): ClipsState {
   const [state, setState] = useState<ClipsState>(() => {
     const cached = clipCache.get(trackName);
-    return cached ? { kind: "ready", clips: cached } : { kind: "loading" };
+    return cached ? { kind: "ready", ...cached } : { kind: "loading", since: Date.now() };
   });
 
   useEffect(() => {
     const cached = clipCache.get(trackName);
-    setState(cached ? { kind: "ready", clips: cached } : { kind: "loading" });
+    setState(cached ? { kind: "ready", ...cached } : { kind: "loading", since: Date.now() });
   }, [trackName]);
 
   useEffect(() => {
     if (!client || !trackId) return;
     let cancelled = false;
     let inFlight = false;
-    let lastSig = "";
+    let lastSig: string | null = null;
     let failures = 0;
 
-    const read = async (): Promise<SessionClip[]> => {
+    const readSession = async (): Promise<SongItem[]> => {
+      let list: any[] | null = null;
       try {
-        const list = await client.getProp("track", trackId, "session_clips");
-        if (Array.isArray(list)) return list as SessionClip[];
+        const r = await client.getProp("track", trackId, "session_clips");
+        if (Array.isArray(r)) list = r;
       } catch {
-        // older MIDI script without session_clips: fall through
+        // older MIDI script without session_clips
       }
-      const slots: any[] = await client.getProp("track", trackId, "clip_slots");
-      const withClip = slots.map((s, i) => ({ s, i })).filter(({ s }) => s?.has_clip);
-      const clips = await Promise.all(
-        withClip.map(({ s }) => client.getProp("clip_slot", String(s.id), "clip").catch(() => null)),
-      );
-      const out: SessionClip[] = [];
-      withClip.forEach(({ s, i }, k) => {
-        const c = clips[k];
-        if (c) out.push({ scene: i, name: c.name ?? "", color: c.color ?? null, clip_id: String(c.id), slot_id: String(s.id) });
-      });
-      return out;
+      if (!list) {
+        const slots: any[] = await client.getProp("track", trackId, "clip_slots");
+        const withClip = slots.map((s, i) => ({ s, i })).filter(({ s }) => s?.has_clip);
+        const clips = await Promise.all(
+          withClip.map(({ s }) => client.getProp("clip_slot", String(s.id), "clip").catch(() => null)),
+        );
+        list = [];
+        withClip.forEach(({ s, i }, k) => {
+          const c = clips[k];
+          if (c) list!.push({ scene: i, name: c.name, color: c.color, slot_id: String(s.id) });
+        });
+      }
+      return list.map((c) => ({
+        key: `s:${c.scene}:${c.name ?? ""}`,
+        name: String(c.name ?? ""),
+        color: typeof c.color === "number" ? c.color : null,
+        source: "session" as const,
+        pos: Number(c.scene),
+        scene: Number(c.scene),
+        slot_id: String(c.slot_id),
+      }));
+    };
+
+    const readArrangement = async (): Promise<SongItem[]> => {
+      const r = await client.getProp("track", trackId, "arrangement_clips");
+      const list: any[] = Array.isArray(r) ? r : [];
+      return list
+        .map((c) => ({
+          key: `a:${Number(c.start_time).toFixed(3)}:${c.name ?? ""}`,
+          name: String(c.name ?? ""),
+          color: typeof c.color === "number" ? c.color : null,
+          source: "arrangement" as const,
+          pos: Number(c.start_time),
+          scene: -1,
+          start: Number(c.start_time),
+          end: Number(c.end_time),
+        }))
+        .sort((a, b) => a.pos - b.pos);
     };
 
     const tick = async () => {
       if (inFlight) return;
       inFlight = true;
       try {
-        const list = await read();
+        let clips = await withTimeout(readSession(), READ_TIMEOUT_MS, "leer la Session");
+        let source: CacheEntry["source"] = "session";
+        if (clips.length === 0) {
+          clips = await withTimeout(readArrangement(), READ_TIMEOUT_MS, "leer el Arreglo").catch(() => []);
+          source = clips.length > 0 ? "arrangement" : "none";
+        }
         if (cancelled) return;
         failures = 0;
-        const sig = list.map((c) => `${c.scene}:${c.name}:${c.color}:${c.slot_id}`).join("|");
+        const sig = source + "|" + clips.map((c) => `${c.key}:${c.color}:${c.end ?? ""}`).join("|");
         if (sig !== lastSig) {
           lastSig = sig;
-          clipCache.set(trackName, list);
-          setState({ kind: "ready", clips: list });
+          clipCache.set(trackName, { clips, source });
+          setState({ kind: "ready", clips, source });
         }
       } catch (err) {
         if (cancelled) return;
         failures += 1;
-        // Only surface an error if we have nothing to show.
-        if (!clipCache.get(trackName) && failures >= 2) {
+        console.warn(`[Canción] No se pudieron leer los clips de «${trackName}»`, err);
+        if (!clipCache.get(trackName) && failures >= 1) {
           setState({ kind: "error", message: err instanceof Error ? err.message : "Live no respondió" });
         }
       } finally {
@@ -210,10 +283,6 @@ export function useTrackProp<T>(client: Ableton | null, trackId: string | null, 
   return value;
 }
 
-/* ------------------------------------------------------------------ */
-/* Everything a view needs                                             */
-/* ------------------------------------------------------------------ */
-
 /** Pull the config saved in the Live set (on connect, then every 10 s). */
 function useLiveConfigSync(client: Ableton | null) {
   useEffect(() => {
@@ -247,14 +316,20 @@ function useLiveConfigSync(client: Ableton | null) {
   }, [client]);
 }
 
+/* ------------------------------------------------------------------ */
+/* Everything a view needs                                             */
+/* ------------------------------------------------------------------ */
+
 export function useSongStructure(client: Ableton | null) {
   useLiveConfigSync(client);
   const rawTracks = useLiveRawList<any>("song", "tracks");
   const config = useStore(songStore, (s) => s.config);
-  const selectedScene = useStore(songStore, (s) => s.selectedScene);
+  const selectedKey = useStore(songStore, (s) => s.selectedKey);
+  const pendingKey = useStore(songStore, (s) => s.pendingKey);
+  const clock = useSongClock(client);
 
   const trackByName = (name: string) =>
-    name ? (rawTracks ?? []).find((t: any) => t.name === name) ?? null : null;
+    name ? (rawTracks ?? []).find((t: any) => String(t.name ?? "").trim() === name.trim()) ?? null : null;
   const songTrack = trackByName(config.songTrack);
   const partsTrack = trackByName(config.partsTrack);
   const songTrackId: string | null = songTrack ? String(songTrack.id) : null;
@@ -262,87 +337,117 @@ export function useSongStructure(client: Ableton | null) {
   const configured = !!config.songTrack && !!config.partsTrack;
   const tracksMissing = configured && rawTracks !== null && (!songTrack || !partsTrack);
 
-  const songsState = useSessionClips(client, songTrackId, config.songTrack);
-  const partsState = useSessionClips(client, partsTrackId, config.partsTrack);
+  const songsState = useTrackClips(client, songTrackId, config.songTrack);
+  const partsState = useTrackClips(client, partsTrackId, config.partsTrack);
   const songs = songsState.kind === "ready" ? songsState.clips : null;
   const parts = partsState.kind === "ready" ? partsState.clips : null;
+  const arrangement = songsState.kind === "ready" && songsState.source === "arrangement";
 
-  const songPlaying = useTrackProp<number>(client, songTrackId, "playing_slot_index");
-  const partPlaying = useTrackProp<number>(client, partsTrackId, "playing_slot_index");
-  const partFired = useTrackProp<number>(client, partsTrackId, "fired_slot_index");
+  // Session: Live tells us what plays. Arrangement: the playhead does.
+  const songSlot = useTrackProp<number>(client, arrangement ? null : songTrackId, "playing_slot_index");
+  const partSlot = useTrackProp<number>(client, arrangement ? null : partsTrackId, "playing_slot_index");
+  const partFiredSlot = useTrackProp<number>(client, arrangement ? null : partsTrackId, "fired_slot_index");
 
-  const songForScene = (scene: number): SessionClip | null => {
-    let found: SessionClip | null = null;
-    for (const s of songs ?? []) if (s.scene <= scene) found = s;
+  const t = clock.beats;
+  const inRange = (c: SongItem, list: SongItem[]) => {
+    const i = list.indexOf(c);
+    const end = c.end ?? list[i + 1]?.pos ?? Number.POSITIVE_INFINITY;
+    return t >= (c.start ?? c.pos) - 0.001 && t < end - 0.001;
+  };
+
+  const playingSong: SongItem | null = !songs
+    ? null
+    : arrangement
+      ? songs.find((s) => inRange(s, songs)) ?? null
+      : songs.find((s) => s.scene === songSlot) ?? null;
+
+  const playingPart: SongItem | null = !parts
+    ? null
+    : arrangement
+      ? (clock.isPlaying || t > 0 ? parts.find((p) => inRange(p, parts)) ?? null : null)
+      : parts.find((p) => p.scene === partSlot) ?? null;
+
+  const firedPart: SongItem | null = !parts
+    ? null
+    : arrangement
+      ? parts.find((p) => p.key === pendingKey) ?? null
+      : parts.find((p) => p.scene === partFiredSlot && p.scene !== partSlot) ?? null;
+
+  /** The song a position belongs to (last song at or before it). */
+  const songForPos = (pos: number): SongItem | null => {
+    let found: SongItem | null = null;
+    for (const s of songs ?? []) if (s.pos <= pos + 0.001) found = s;
     return found;
   };
 
-  // Follow Live: a playing song clip, or the song owning the playing part.
+  // Follow Live.
   useEffect(() => {
     if (!config.follow || !songs) return;
-    const fromSong = typeof songPlaying === "number" && songPlaying >= 0 ? songs.find((s) => s.scene === songPlaying) : null;
-    const fromPart = typeof partPlaying === "number" && partPlaying >= 0 ? songForScene(partPlaying) : null;
-    const target = fromSong ?? fromPart;
-    if (target && target.scene !== songStore.getState().selectedScene) songStore.getState().select(target.scene);
+    const target = playingSong ?? (playingPart ? songForPos(playingPart.pos) : null);
+    if (target && target.key !== songStore.getState().selectedKey) songStore.getState().select(target.key);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [config.follow, songs, songPlaying, partPlaying]);
+  }, [config.follow, songs, playingSong?.key, playingPart?.key]);
 
   // Default to the first song.
   useEffect(() => {
-    if (songs && songs.length > 0 && (selectedScene === null || !songs.some((s) => s.scene === selectedScene))) {
-      songStore.getState().select(songs[0].scene);
+    if (songs && songs.length > 0 && (selectedKey === null || !songs.some((s) => s.key === selectedKey))) {
+      songStore.getState().select(songs[0].key);
     }
-  }, [songs, selectedScene]);
+  }, [songs, selectedKey]);
 
-  const song = songs?.find((s) => s.scene === selectedScene) ?? null;
+  const song = songs?.find((s) => s.key === selectedKey) ?? null;
   const songIndex = song && songs ? songs.indexOf(song) : -1;
   const nextSong = songs && songIndex >= 0 ? songs[songIndex + 1] ?? null : null;
 
   const autoParts = useMemo(() => {
     if (!song || !parts) return [];
-    const end = nextSong ? nextSong.scene : Number.POSITIVE_INFINITY;
-    return parts.filter((p) => p.scene >= song.scene && p.scene < end);
+    const end = song.end ?? (nextSong ? nextSong.pos : Number.POSITIVE_INFINITY);
+    return parts.filter((p) => p.pos >= song.pos - 0.001 && p.pos < end - 0.001);
   }, [song, nextSong, parts]);
 
   const picked = song ? config.picks[song.name] : undefined;
-  const songParts: SessionClip[] = useMemo(() => {
+  const songParts: SongItem[] = useMemo(() => {
     if (!picked || !parts) return autoParts;
-    const out: SessionClip[] = [];
+    const out: SongItem[] = [];
     for (const ref of picked) {
-      const exact = parts.find((p) => p.scene === ref.scene && p.name === ref.name);
-      const byName = exact ?? parts.find((p) => p.name === ref.name && (!song || p.scene >= song.scene));
+      const exact = parts.find((p) => Math.abs(p.pos - ref.scene) < 0.01 && p.name === ref.name);
+      const byName = exact ?? parts.find((p) => p.name === ref.name && (!song || p.pos >= song.pos));
       if (byName) out.push(byName);
     }
     return out;
   }, [picked, parts, autoParts, song]);
 
-  const playingIdx = songParts.findIndex((p) => p.scene === partPlaying);
+  const playingIdx = playingPart ? songParts.findIndex((p) => p.key === playingPart.key) : -1;
   const currentPart = playingIdx >= 0 ? songParts[playingIdx] : null;
   const nextPart = playingIdx >= 0 ? songParts[playingIdx + 1] ?? null : null;
-  const queuedPart = songParts.find((p) => p.scene === partFired && p.scene !== partPlaying) ?? null;
+  const queuedPart = firedPart && songParts.some((p) => p.key === firedPart.key) ? firedPart : null;
 
   return {
     rawTracks,
     config,
     setConfig: (c: SongConfig) => songStore.getState().setConfig(c),
-    select: (scene: number | null) => songStore.getState().select(scene),
+    select: (key: string | null) => songStore.getState().select(key),
+    setPending: (key: string | null) => songStore.setState({ pendingKey: key }),
     configured,
     tracksMissing,
+    songTrackFound: !!songTrack,
+    partsTrackFound: !!partsTrack,
     songsState,
     partsState,
     songs,
     parts,
-    selectedScene,
+    arrangement,
+    selectedKey,
     song,
     nextSong,
     songParts,
     picked: !!picked,
-    songPlaying: typeof songPlaying === "number" ? songPlaying : -1,
-    partPlaying: typeof partPlaying === "number" ? partPlaying : -1,
-    partFired: typeof partFired === "number" ? partFired : -1,
+    playingSongKey: playingSong?.key ?? null,
+    playingPartKey: playingPart?.key ?? null,
+    firedPartKey: firedPart?.key ?? null,
     currentPart,
     nextPart,
     queuedPart,
-    songForScene,
+    songForPos,
   };
 }

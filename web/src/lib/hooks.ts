@@ -33,6 +33,12 @@ const KNOWN_NON_LISTENABLE = new Set<string>([
   "mixer-device:cue_volume",
   "device-parameter:value_string",
   "track:can_be_armed",
+  "device-parameter:min",
+  "device-parameter:max",
+  "device-parameter:is_quantized",
+  "device-parameter:value_items",
+  "device:type",
+  "device:class_name",
 ]);
 
 /** Session-learned non-listenable props (shared across all hook users). */

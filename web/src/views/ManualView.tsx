@@ -97,7 +97,9 @@ const SECTIONS: Section[] = [
           una y si un pad lanza solo el clip o la escena completa.
         </p>
         <ul>
-          <li>Arriba aparecen tus canciones; al elegir una, los pads muestran sus partes: los clips de la pista de partes desde la escena de la canción hasta la siguiente canción.</li>
+          <li>Los clips pueden estar en la <strong>Session</strong> o en el <strong>Arreglo</strong>; la app detecta dónde están.</li>
+          <li>Arriba aparecen tus canciones; al elegir una, los pads muestran sus partes: los clips de la pista de partes que caen dentro de esa canción.</li>
+          <li>En el <strong>Arreglo</strong>, tocar una parte mueve la reproducción a esa parte <strong>en el siguiente compás</strong> (sin salirse del tiempo); si está parado, solo la deja lista para Play.</li>
           <li><strong>Elegir partes</strong>: las escoges a mano y en el orden que quieras (se guarda por canción). <strong>Automático</strong> vuelve al modo por escenas.</li>
           <li><strong>Seguir a Live</strong>: cambia de canción sola cuando Live toca otra.</li>
           <li>El pad que suena brilla, el que está en cola parpadea y el siguiente tiene borde punteado («Sigue»).</li>

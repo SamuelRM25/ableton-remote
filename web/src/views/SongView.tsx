@@ -1,13 +1,16 @@
 /**
  * "Canción" view: pads for the parts of the current song.
- * See lib/song-structure.ts for how songs and parts are read from Live.
+ * Songs and parts can be clips in the Session OR in the Arrangement;
+ * see lib/song-structure.ts.
  */
 import { useEffect, useRef, useState } from "react";
 import type { Ableton } from "ableton-js";
 import { useLiveRawList } from "../lib/list-hooks";
 import { colorToHex } from "../lib/color";
 import { toast } from "../lib/toast";
-import { useSongStructure, type SessionClip, type SongConfig } from "../lib/song-structure";
+import { beatsToBarLabel } from "../lib/clock";
+import { jumpOnNextDownbeat } from "../lib/cue-jump";
+import { useSongStructure, type SongItem, type SongConfig } from "../lib/song-structure";
 import { EmptyPanel, Led, LedKey, ViewStrip } from "../components/hw";
 
 export function SongView({ client }: { client: Ableton | null }) {
@@ -16,34 +19,39 @@ export function SongView({ client }: { client: Ableton | null }) {
   const { config, setConfig, song, songs, parts } = st;
   const [setupOpen, setSetupOpen] = useState(false);
   const [picking, setPicking] = useState(false);
+  const cancelJump = useRef<(() => void) | null>(null);
 
-  async function launch(part: SessionClip) {
+  useEffect(() => () => cancelJump.current?.(), []);
+
+  async function launch(item: SongItem) {
     if (!client) return;
     try {
+      if (item.source === "arrangement") {
+        // Arrangement: move the playhead. While playing it waits for the
+        // next 1 and lands exactly on the beat.
+        cancelJump.current?.();
+        st.setPending(item.key);
+        cancelJump.current = jumpOnNextDownbeat(client, item.start ?? item.pos, (ok) => {
+          st.setPending(null);
+          if (!ok) toast(`No se pudo ir a ${item.name}`);
+        });
+        return;
+      }
       if (config.launch === "scene") {
-        const scene = rawScenes?.[part.scene];
+        const scene = rawScenes?.[item.scene];
         if (!scene) throw new Error("no scene");
         await client.sendCommand({ ns: "scene", nsid: String(scene.id), name: "fire" });
       } else {
-        await client.sendCommand({ ns: "clip_slot", nsid: part.slot_id, name: "fire" });
+        await client.sendCommand({ ns: "clip_slot", nsid: String(item.slot_id), name: "fire" });
       }
     } catch {
-      toast(`No se pudo lanzar ${part.name}`);
-    }
-  }
-
-  async function launchSong() {
-    if (!client || !song) return;
-    try {
-      await client.sendCommand({ ns: "clip_slot", nsid: song.slot_id, name: "fire" });
-    } catch {
-      toast("No se pudo lanzar la canción");
+      toast(`No se pudo lanzar ${item.name}`);
     }
   }
 
   const { configured } = st;
-  const reading =
-    configured && !st.tracksMissing && (st.songsState.kind === "loading" || st.partsState.kind === "loading");
+  const loadingSince =
+    st.songsState.kind === "loading" ? st.songsState.since : st.partsState.kind === "loading" ? st.partsState.since : null;
   const readError =
     st.songsState.kind === "error" ? st.songsState.message : st.partsState.kind === "error" ? st.partsState.message : null;
 
@@ -54,6 +62,11 @@ export function SongView({ client }: { client: Ableton | null }) {
         {song && (
           <span className="truncate" style={{ fontSize: 14, color: "var(--color-text-2)" }}>
             {song.name}
+          </span>
+        )}
+        {st.songs && (
+          <span className="label-cap hidden md:inline" style={{ fontSize: 10 }}>
+            {st.arrangement ? "Clips del arreglo" : "Clips de la session"}
           </span>
         )}
         <div className="flex-1" />
@@ -79,6 +92,7 @@ export function SongView({ client }: { client: Ableton | null }) {
           tracks={(st.rawTracks ?? []).map((t: any) => String(t.name ?? ""))}
           config={config}
           onChange={setConfig}
+          arrangement={st.arrangement}
           onDone={configured && !st.tracksMissing ? () => setSetupOpen(false) : undefined}
         />
       )}
@@ -86,10 +100,10 @@ export function SongView({ client }: { client: Ableton | null }) {
       {configured && songs && songs.length > 0 && (
         <SongStrip
           songs={songs}
-          selected={st.selectedScene}
-          playing={st.songPlaying}
-          onSelect={(scene) => {
-            st.select(scene);
+          selected={st.selectedKey}
+          playing={st.playingSongKey}
+          onSelect={(key) => {
+            st.select(key);
             setPicking(false);
           }}
         />
@@ -99,15 +113,18 @@ export function SongView({ client }: { client: Ableton | null }) {
         {!client ? (
           <EmptyPanel title="Live no está conectado" hint="La app se reconecta sola en cuanto Live responda." />
         ) : !configured ? null : st.tracksMissing ? (
-          <EmptyPanel title="No encuentro esas pistas en el set" hint="¿Les cambiaste el nombre? Elígelas de nuevo en Pistas." />
-        ) : readError && !songs ? (
+          <EmptyPanel
+            title="No encuentro esas pistas en el set"
+            hint={`${!st.songTrackFound ? `«${config.songTrack}» no existe. ` : ""}${!st.partsTrackFound ? `«${config.partsTrack}» no existe. ` : ""}¿Les cambiaste el nombre? Elígelas de nuevo en Pistas.`}
+          />
+        ) : readError && (!songs || !parts) ? (
           <EmptyPanel title="Live no devolvió los clips" hint={`${readError}. Se vuelve a intentar sola cada pocos segundos.`} />
-        ) : reading || !songs || !parts ? (
-          <EmptyPanel title="Leyendo clips de Live…" />
+        ) : !songs || !parts ? (
+          <LoadingPanel since={loadingSince} songs={st.songsState.kind} parts={st.partsState.kind} config={config} />
         ) : songs.length === 0 ? (
           <EmptyPanel
             title={`No hay clips en «${config.songTrack}»`}
-            hint="Crea un clip MIDI vacío por canción en esa pista y ponle el nombre de la canción."
+            hint="Pon un clip MIDI (puede estar vacío) por canción en esa pista, en la Session o en el Arreglo, y ponle el nombre de la canción."
           />
         ) : !song ? (
           <EmptyPanel title="Elige una canción" hint="Tócala en la tira de arriba." />
@@ -116,9 +133,9 @@ export function SongView({ client }: { client: Ableton | null }) {
             song={song}
             parts={parts}
             initial={st.songParts}
-            songForScene={st.songForScene}
+            songForPos={st.songForPos}
             onSave={(sel) => {
-              setConfig({ ...config, picks: { ...config.picks, [song.name]: sel.map((p) => ({ name: p.name, scene: p.scene })) } });
+              setConfig({ ...config, picks: { ...config.picks, [song.name]: sel.map((p) => ({ name: p.name, scene: p.pos })) } });
               setPicking(false);
               toast(`Partes guardadas para ${song.name}`);
             }}
@@ -134,27 +151,36 @@ export function SongView({ client }: { client: Ableton | null }) {
         ) : (
           <div className="mx-auto" style={{ maxWidth: 1100 }}>
             <div className="flex items-center gap-3 mb-3 flex-wrap">
-              <LedKey size="md" color="play" variant="ring" active={st.songPlaying === song.scene} label={`▶ ${song.name}`} onClick={() => void launchSong()} style={{ textTransform: "none", fontSize: 15 }} />
+              <LedKey
+                size="md"
+                color="play"
+                variant="ring"
+                active={st.playingSongKey === song.key}
+                label={`▶ ${song.name}`}
+                onClick={() => void launch(song)}
+                style={{ textTransform: "none", fontSize: 15 }}
+              />
               <span style={{ fontSize: 13, color: "var(--color-text-2)" }}>
-                {st.songParts.length} {st.songParts.length === 1 ? "parte" : "partes"} · {st.picked ? "elegidas a mano" : "automáticas"} · {config.launch === "scene" ? "lanza la escena" : "lanza el clip"}
+                {st.songParts.length} {st.songParts.length === 1 ? "parte" : "partes"} · {st.picked ? "elegidas a mano" : "automáticas"} ·{" "}
+                {st.arrangement ? "salta en el siguiente compás" : config.launch === "scene" ? "lanza la escena" : "lanza el clip"}
               </span>
             </div>
             {st.songParts.length === 0 ? (
               <EmptyPanel
                 title="Esta canción no tiene partes"
-                hint={`Pon clips en «${config.partsTrack}» debajo de «${song.name}», o elígelas a mano con «Elegir partes».`}
+                hint={`Pon clips en «${config.partsTrack}» dentro de «${song.name}», o elígelas a mano con «Elegir partes».`}
               />
             ) : (
               <div className="panel" style={{ padding: 14, borderRadius: 16 }}>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: 10 }}>
                   {st.songParts.map((p, i) => (
                     <PartPad
-                      key={`${p.scene}-${p.name}`}
+                      key={p.key}
                       part={p}
                       index={i}
-                      playing={st.partPlaying === p.scene}
-                      queued={st.partFired === p.scene && st.partPlaying !== p.scene}
-                      isNext={st.nextPart === p}
+                      playing={st.playingPartKey === p.key}
+                      queued={st.firedPartKey === p.key && st.playingPartKey !== p.key}
+                      isNext={st.nextPart?.key === p.key}
                       onPress={() => void launch(p)}
                     />
                   ))}
@@ -168,6 +194,33 @@ export function SongView({ client }: { client: Ableton | null }) {
   );
 }
 
+/** Loading, with enough detail to tell what Live is (not) answering. */
+function LoadingPanel({
+  since,
+  songs,
+  parts,
+  config,
+}: {
+  since: number | null;
+  songs: string;
+  parts: string;
+  config: SongConfig;
+}) {
+  const [, tick] = useState(0);
+  useEffect(() => {
+    const t = window.setInterval(() => tick((n) => n + 1), 1000);
+    return () => window.clearInterval(t);
+  }, []);
+  const secs = since ? Math.floor((Date.now() - since) / 1000) : 0;
+  const label = (k: string) => (k === "ready" ? "listo" : k === "error" ? "error" : "leyendo…");
+  return (
+    <EmptyPanel
+      title="Leyendo clips de Live…"
+      hint={`«${config.songTrack}»: ${label(songs)} · «${config.partsTrack}»: ${label(parts)}${secs >= 3 ? ` · ${secs} s` : ""}`}
+    />
+  );
+}
+
 /* ------------------------------------------------------------------ */
 
 function SetupPanel({
@@ -175,11 +228,13 @@ function SetupPanel({
   config,
   onChange,
   onDone,
+  arrangement,
 }: {
   tracks: string[];
   config: SongConfig;
   onChange: (c: SongConfig) => void;
   onDone?: () => void;
+  arrangement?: boolean;
 }) {
   const sel = (label: string, value: string, key: "songTrack" | "partsTrack") => (
     <label className="flex flex-col gap-1.5" style={{ minWidth: 180 }}>
@@ -203,15 +258,17 @@ function SetupPanel({
       <div className="panel flex flex-wrap items-end gap-4" style={{ padding: 16 }}>
         {sel("Pista de canciones", config.songTrack, "songTrack")}
         {sel("Pista de partes", config.partsTrack, "partsTrack")}
-        <div className="flex flex-col gap-1.5">
-          <span className="label-cap" style={{ fontSize: 10 }}>Al tocar un pad</span>
-          <div className="flex gap-1.5">
-            <LedKey size="sm" variant="ring" color="cue" active={config.launch === "clip"} label="Lanzar clip" onClick={() => onChange({ ...config, launch: "clip" })} />
-            <LedKey size="sm" variant="ring" color="cue" active={config.launch === "scene"} label="Lanzar escena" onClick={() => onChange({ ...config, launch: "scene" })} />
+        {!arrangement && (
+          <div className="flex flex-col gap-1.5">
+            <span className="label-cap" style={{ fontSize: 10 }}>Al tocar un pad</span>
+            <div className="flex gap-1.5">
+              <LedKey size="sm" variant="ring" color="cue" active={config.launch === "clip"} label="Lanzar clip" onClick={() => onChange({ ...config, launch: "clip" })} />
+              <LedKey size="sm" variant="ring" color="cue" active={config.launch === "scene"} label="Lanzar escena" onClick={() => onChange({ ...config, launch: "scene" })} />
+            </div>
           </div>
-        </div>
-        <p style={{ margin: 0, fontSize: 13, color: "var(--color-text-2)", maxWidth: 420, lineHeight: 1.45 }}>
-          Las partes de cada canción son los clips de la pista de partes que están desde su escena hasta la siguiente canción. Se guardan por nombre de pista, así que sobreviven a reiniciar Live.
+        )}
+        <p style={{ margin: 0, fontSize: 13, color: "var(--color-text-2)", maxWidth: 460, lineHeight: 1.45 }}>
+          Sirve con clips en la Session o en el Arreglo. Las partes de cada canción son los clips de la pista de partes que caen dentro de la canción (hasta que empieza la siguiente). En el Arreglo, tocar una parte mueve la reproducción ahí en el siguiente compás, sin salirse del tiempo.
         </p>
         {onDone && <LedKey size="sm" color="play" active label="Listo" onClick={onDone} />}
       </div>
@@ -225,14 +282,14 @@ function SongStrip({
   playing,
   onSelect,
 }: {
-  songs: SessionClip[];
-  selected: number | null;
-  playing: number;
-  onSelect: (scene: number) => void;
+  songs: SongItem[];
+  selected: string | null;
+  playing: string | null;
+  onSelect: (key: string) => void;
 }) {
   const ref = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
-    const el = ref.current?.querySelector<HTMLElement>(`[data-scene="${selected}"]`);
+    const el = ref.current?.querySelector<HTMLElement>(`[data-key="${CSS.escape(selected ?? "")}"]`);
     el?.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
   }, [selected]);
   return (
@@ -242,14 +299,14 @@ function SongStrip({
       style={{ touchAction: "pan-x", borderBottom: "1px solid rgba(0,0,0,0.6)" }}
     >
       {songs.map((s, i) => {
-        const active = s.scene === selected;
-        const isPlaying = s.scene === playing;
+        const active = s.key === selected;
+        const isPlaying = s.key === playing;
         const color = colorToHex(s.color) ?? "#8a8d96";
         return (
           <button
-            key={`${s.scene}-${s.name}`}
-            data-scene={s.scene}
-            onClick={() => onSelect(s.scene)}
+            key={s.key}
+            data-key={s.key}
+            onClick={() => onSelect(s.key)}
             className="tactile shrink-0 flex items-center gap-2"
             style={{
               height: 44,
@@ -278,7 +335,7 @@ function PartPad({
   isNext,
   onPress,
 }: {
-  part: SessionClip;
+  part: SongItem;
   index: number;
   playing: boolean;
   queued: boolean;
@@ -355,23 +412,23 @@ function PartPicker({
   song,
   parts,
   initial,
-  songForScene,
+  songForPos,
   onSave,
   onAuto,
   onCancel,
 }: {
-  song: SessionClip;
-  parts: SessionClip[];
-  initial: SessionClip[];
-  songForScene: (scene: number) => SessionClip | null;
-  onSave: (sel: SessionClip[]) => void;
+  song: SongItem;
+  parts: SongItem[];
+  initial: SongItem[];
+  songForPos: (pos: number) => SongItem | null;
+  onSave: (sel: SongItem[]) => void;
   onAuto: () => void;
   onCancel: () => void;
 }) {
-  const key = (p: SessionClip) => `${p.scene}:${p.name}`;
+  const key = (p: SongItem) => p.key;
   // Ordered selection: pads follow the order you tap them in.
   const [sel, setSel] = useState<string[]>(() => initial.map(key));
-  const toggle = (p: SessionClip) =>
+  const toggle = (p: SongItem) =>
     setSel((s) => (s.includes(key(p)) ? s.filter((k) => k !== key(p)) : [...s, key(p)]));
   const byKey = new Map(parts.map((p) => [key(p), p]));
 
@@ -384,13 +441,13 @@ function PartPicker({
         <LedKey size="sm" label="Ninguna" onClick={() => setSel([])} />
         <LedKey size="sm" label="Automático" onClick={onAuto} title="Usar los clips debajo de la canción" />
         <LedKey size="sm" label="Cancelar" onClick={onCancel} />
-        <LedKey size="sm" color="play" active label={`Guardar (${sel.length})`} onClick={() => onSave(sel.map((k) => byKey.get(k)).filter((p): p is SessionClip => !!p))} />
+        <LedKey size="sm" color="play" active label={`Guardar (${sel.length})`} onClick={() => onSave(sel.map((k) => byKey.get(k)).filter((p): p is SongItem => !!p))} />
       </div>
       <div className="panel" style={{ padding: 8 }}>
         {parts.map((p) => {
           const order = sel.indexOf(key(p));
-          const owner = songForScene(p.scene);
-          const inSong = owner?.scene === song.scene;
+          const owner = songForPos(p.pos);
+          const inSong = owner?.key === song.key;
           return (
             <button
               key={key(p)}
@@ -423,7 +480,7 @@ function PartPicker({
               <span style={{ width: 4, height: 22, borderRadius: 2, background: colorToHex(p.color) ?? "#777" }} />
               <span style={{ fontSize: 15, fontWeight: 600, flex: 1 }}>{p.name || "Sin nombre"}</span>
               <span className="value-mono" style={{ fontSize: 11, color: "var(--color-text-3)" }}>
-                escena {p.scene + 1}
+                {p.source === "session" ? `escena ${p.scene + 1}` : `compás ${beatsToBarLabel(p.pos)}`}
                 {owner && !inSong ? ` · ${owner.name}` : ""}
               </span>
             </button>

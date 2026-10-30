@@ -102,7 +102,8 @@ function ParamRow({ param }: { param: any }) {
   const min = useLiveChildProp<number>(param, "min");
   const max = useLiveChildProp<number>(param, "max");
   const isQuantized = useLiveChildProp<boolean>(param, "is_quantized");
-  const valueItems = useLiveChildProp<string[]>(param, "value_items");
+  // Live only has value_items for quantized params (asking others errors).
+  const valueItems = useLiveChildProp<string[]>(isQuantized ? param : null, "value_items");
   const [value, setValue] = useOptimistic<number>(live, (v) => {
     void param.set("value", v).catch(() => toast("No se pudo cambiar el parámetro"));
   });

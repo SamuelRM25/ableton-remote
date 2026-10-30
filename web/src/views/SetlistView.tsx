@@ -154,7 +154,7 @@ function nextSeq(items: SetlistItem[]): number {
 
 
 
-export function SetlistView() {
+export function SetlistView({ switcher }: { switcher?: React.ReactNode } = {}) {
   const client = useAbleton();
   const cues = useLiveRawList<any>("song", "cue_points");
   const isPlaying = useLiveProp<boolean>(client, (c) => c.song, "is_playing");
@@ -948,11 +948,9 @@ export function SetlistView() {
           borderBottom: "1px solid var(--color-border)",
         }}
       >
-        <span className="label-cap" style={{ color: "var(--color-accent-cue)" }}>
-          Setlist
-        </span>
+        {switcher}
         <span
-          className="value-mono truncate"
+          className="value-mono truncate hidden lg:inline"
           style={{ fontSize: 12, color: "var(--color-text-1)", maxWidth: 220 }}
         >
           {projectLabel(filePath ?? null)}
@@ -962,9 +960,9 @@ export function SetlistView() {
         </span>
         <div className="flex-1" />
         <ToolBtn primary onClick={handleMarkHere} icon={<IconBookmark size={14} />}>
-          Mark here
+          Marcar aquí
         </ToolBtn>
-        <ToolBtn onClick={handleAddSong}>+ Canción</ToolBtn>
+        <ToolBtn onClick={handleAddSong}>+ Grupo</ToolBtn>
         <ToolBtn onClick={handleAddManual}>+ Manual</ToolBtn>
         <ToolBtn onClick={exportSetlist}>Export</ToolBtn>
         <label className="tactile" style={{ ...toolBtnStyle, cursor: "pointer" }}>

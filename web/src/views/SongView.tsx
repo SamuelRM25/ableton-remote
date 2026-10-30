@@ -9,11 +9,13 @@ import { useLiveRawList } from "../lib/list-hooks";
 import { colorToHex } from "../lib/color";
 import { toast } from "../lib/toast";
 import { beatsToBarLabel } from "../lib/clock";
-import { jumpOnNextDownbeat } from "../lib/cue-jump";
-import { useSongStructure, type SongItem, type SongConfig } from "../lib/song-structure";
+import { jumpOnNextDownbeat, loopRange } from "../lib/cue-jump";
+import { formatDuration, useSongStructure, type SongItem, type SongConfig } from "../lib/song-structure";
+import { useLiveProp } from "../lib/hooks";
 import { EmptyPanel, Led, LedKey, ViewStrip } from "../components/hw";
+import { IconLoop } from "../components/icons";
 
-export function SongView({ client }: { client: Ableton | null }) {
+export function SongView({ client, switcher }: { client: Ableton | null; switcher?: React.ReactNode }) {
   const rawScenes = useLiveRawList<any>("song", "scenes");
   const st = useSongStructure(client);
   const { config, setConfig, song, songs, parts } = st;
@@ -22,6 +24,39 @@ export function SongView({ client }: { client: Ableton | null }) {
   const cancelJump = useRef<(() => void) | null>(null);
 
   useEffect(() => () => cancelJump.current?.(), []);
+  const liveLoop = useLiveProp<boolean>(client, (c) => c.song, "loop");
+  const [loopKey, setLoopKey] = useState<string | null>(null);
+  useEffect(() => {
+    if (liveLoop === false) setLoopKey(null);
+  }, [liveLoop]);
+
+  /** Loop one part (its start to the next part / its end), like Live's
+   *  "Loop to Next Locator". Tap again to release. */
+  async function toggleLoop(item: SongItem) {
+    if (!client) return;
+    try {
+      if (loopKey === item.key) {
+        await client.song.set("loop", false);
+        setLoopKey(null);
+        return;
+      }
+      const start = item.start ?? item.pos;
+      const end = item.end ?? (song ? st.songEnd(song) : start + 16);
+      if (!isFinite(end) || end <= start) throw new Error("sin final");
+      await loopRange(client, start, end);
+      setLoopKey(item.key);
+      toast(`Loop: ${item.name}`);
+    } catch {
+      toast("No se pudo activar el loop");
+    }
+  }
+
+  /** Go to a song of the setlist (on the next 1 when playing). */
+  function goToSong(target: SongItem | null) {
+    if (!target) return;
+    st.select(target.key);
+    if (target.source === "arrangement") void launch(target);
+  }
 
   async function launch(item: SongItem) {
     if (!client) return;
@@ -58,18 +93,24 @@ export function SongView({ client }: { client: Ableton | null }) {
   return (
     <div className="h-full flex flex-col">
       <ViewStrip>
-        <span style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 16, letterSpacing: "0.06em" }}>Canción</span>
-        {song && (
-          <span className="truncate" style={{ fontSize: 14, color: "var(--color-text-2)" }}>
-            {song.name}
-          </span>
-        )}
-        {st.songs && (
-          <span className="label-cap hidden md:inline" style={{ fontSize: 10 }}>
-            {st.arrangement ? "Clips del arreglo" : "Clips de la session"}
+        {switcher}
+        {st.activeSetlist && (
+          <span className="truncate hidden md:inline" style={{ fontSize: 13, color: "var(--color-text-2)" }}>
+            {st.activeSetlist.name}
           </span>
         )}
         <div className="flex-1" />
+        {configured && st.activeSetlist && st.arrangement && (
+          <LedKey
+            size="sm"
+            variant="dot"
+            color="play"
+            active={config.chain}
+            label="Encadenar"
+            title="Al terminar una canción, saltar sola a la siguiente del setlist"
+            onClick={() => setConfig({ ...config, chain: !config.chain })}
+          />
+        )}
         {configured && (
           <LedKey
             size="sm"
@@ -93,6 +134,7 @@ export function SongView({ client }: { client: Ableton | null }) {
           config={config}
           onChange={setConfig}
           arrangement={st.arrangement}
+          partsArrangement={st.partsArrangement}
           onDone={configured && !st.tracksMissing ? () => setSetupOpen(false) : undefined}
         />
       )}
@@ -100,6 +142,7 @@ export function SongView({ client }: { client: Ableton | null }) {
       {configured && songs && songs.length > 0 && (
         <SongStrip
           songs={songs}
+          durationOf={st.durationSec}
           selected={st.selectedKey}
           playing={st.playingSongKey}
           onSelect={(key) => {
@@ -151,6 +194,7 @@ export function SongView({ client }: { client: Ableton | null }) {
         ) : (
           <div className="mx-auto" style={{ maxWidth: 1100 }}>
             <div className="flex items-center gap-3 mb-3 flex-wrap">
+              <LedKey size="md" width={48} label="◀" title="Canción anterior" disabled={!st.prevSong} onClick={() => goToSong(st.prevSong)} />
               <LedKey
                 size="md"
                 color="play"
@@ -160,15 +204,21 @@ export function SongView({ client }: { client: Ableton | null }) {
                 onClick={() => void launch(song)}
                 style={{ textTransform: "none", fontSize: 15 }}
               />
+              <LedKey size="md" width={48} label="▶▶" title="Siguiente canción" disabled={!st.nextSong} onClick={() => goToSong(st.nextSong)} />
               <span style={{ fontSize: 13, color: "var(--color-text-2)" }}>
                 {st.songParts.length} {st.songParts.length === 1 ? "parte" : "partes"} · {st.picked ? "elegidas a mano" : "automáticas"} ·{" "}
-                {st.arrangement ? "salta en el siguiente compás" : config.launch === "scene" ? "lanza la escena" : "lanza el clip"}
+                {st.partsArrangement ? "salta en el siguiente compás" : config.launch === "scene" ? "lanza la escena" : "lanza el clip"}
+                {st.durationSec(song) !== null && ` · ${formatDuration(st.durationSec(song)!)}`}
               </span>
             </div>
             {st.songParts.length === 0 ? (
               <EmptyPanel
                 title="Esta canción no tiene partes"
-                hint={`Pon clips en «${config.partsTrack}» dentro de «${song.name}», o elígelas a mano con «Elegir partes».`}
+                hint={
+                  config.partsSource === "cues"
+                    ? `No hay marcadores de Live dentro de «${song.name}». Ponlos en el arreglo o usa «Marcar aquí» en la pestaña Marcas.`
+                    : `Pon clips en «${config.partsTrack}» dentro de «${song.name}», o elígelas a mano con «Elegir partes».`
+                }
               />
             ) : (
               <div className="panel" style={{ padding: 14, borderRadius: 16 }}>
@@ -181,6 +231,8 @@ export function SongView({ client }: { client: Ableton | null }) {
                       playing={st.playingPartKey === p.key}
                       queued={st.firedPartKey === p.key && st.playingPartKey !== p.key}
                       isNext={st.nextPart?.key === p.key}
+                      looping={loopKey === p.key}
+                      onLoop={p.source === "arrangement" ? () => void toggleLoop(p) : undefined}
                       onPress={() => void launch(p)}
                     />
                   ))}
@@ -229,12 +281,14 @@ function SetupPanel({
   onChange,
   onDone,
   arrangement,
+  partsArrangement,
 }: {
   tracks: string[];
   config: SongConfig;
   onChange: (c: SongConfig) => void;
   onDone?: () => void;
   arrangement?: boolean;
+  partsArrangement?: boolean;
 }) {
   const sel = (label: string, value: string, key: "songTrack" | "partsTrack") => (
     <label className="flex flex-col gap-1.5" style={{ minWidth: 180 }}>
@@ -257,8 +311,15 @@ function SetupPanel({
     <div className="shrink-0 px-3 sm:px-5 pt-3">
       <div className="panel flex flex-wrap items-end gap-4" style={{ padding: 16 }}>
         {sel("Pista de canciones", config.songTrack, "songTrack")}
-        {sel("Pista de partes", config.partsTrack, "partsTrack")}
-        {!arrangement && (
+        <div className="flex flex-col gap-1.5">
+          <span className="label-cap" style={{ fontSize: 10 }}>Partes de cada canción</span>
+          <div className="flex gap-1.5">
+            <LedKey size="sm" variant="ring" color="cue" active={config.partsSource !== "cues"} label="Pista MIDI" onClick={() => onChange({ ...config, partsSource: "track" })} />
+            <LedKey size="sm" variant="ring" color="cue" active={config.partsSource === "cues"} label="Marcadores de Live" onClick={() => onChange({ ...config, partsSource: "cues" })} />
+          </div>
+        </div>
+        {config.partsSource !== "cues" && sel("Pista de partes", config.partsTrack, "partsTrack")}
+        {!partsArrangement && (
           <div className="flex flex-col gap-1.5">
             <span className="label-cap" style={{ fontSize: 10 }}>Al tocar un pad</span>
             <div className="flex gap-1.5">
@@ -278,11 +339,13 @@ function SetupPanel({
 
 function SongStrip({
   songs,
+  durationOf,
   selected,
   playing,
   onSelect,
 }: {
   songs: SongItem[];
+  durationOf: (s: SongItem) => number | null;
   selected: string | null;
   playing: string | null;
   onSelect: (key: string) => void;
@@ -319,6 +382,11 @@ function SongStrip({
             <span style={{ fontSize: 15, fontWeight: 700, color: active ? "var(--color-text-1)" : "var(--color-text-2)", whiteSpace: "nowrap" }}>
               {s.name || "Sin nombre"}
             </span>
+            {durationOf(s) !== null && (
+              <span className="value-mono" style={{ fontSize: 11, color: "var(--color-text-3)" }}>
+                {formatDuration(durationOf(s)!)}
+              </span>
+            )}
             {isPlaying && <Led on color="play" size={6} />}
           </button>
         );
@@ -334,6 +402,8 @@ function PartPad({
   queued,
   isNext,
   onPress,
+  looping,
+  onLoop,
 }: {
   part: SongItem;
   index: number;
@@ -341,10 +411,13 @@ function PartPad({
   queued: boolean;
   isNext: boolean;
   onPress: () => void;
+  looping?: boolean;
+  onLoop?: () => void;
 }) {
   const [down, setDown] = useState(false);
   const c = colorToHex(part.color) ?? "#7c7f88";
   return (
+    <div style={{ position: "relative", minWidth: 0 }}>
     <button
       onPointerDown={() => setDown(true)}
       onPointerUp={() => setDown(false)}
@@ -355,6 +428,8 @@ function PartPad({
       aria-pressed={playing}
       style={{
         position: "relative",
+        width: "100%",
+        height: "100%",
         minHeight: 104,
         borderRadius: 12,
         padding: "10px 12px",
@@ -395,6 +470,7 @@ function PartPad({
           display: "-webkit-box",
           WebkitLineClamp: 2,
           WebkitBoxOrient: "vertical",
+          paddingRight: onLoop ? 40 : 0,
         }}
       >
         {part.name || "Sin nombre"}
@@ -405,6 +481,32 @@ function PartPad({
         </span>
       )}
     </button>
+      {onLoop && (
+        <button
+          onClick={onLoop}
+          aria-pressed={looping}
+          aria-label={looping ? `Quitar loop de ${part.name}` : `Loop de ${part.name}`}
+          title={looping ? "Quitar loop" : "Loop de esta parte (como «Loop hasta el siguiente localizador»)"}
+          className="tactile"
+          style={{
+            position: "absolute",
+            right: 8,
+            bottom: 8,
+            width: 34,
+            height: 30,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            color: looping ? "var(--color-accent-cue)" : "var(--color-text-2)",
+            boxShadow: looping
+              ? "inset 0 0 0 1.5px var(--color-accent-cue), 0 0 12px rgba(255,178,62,0.45)"
+              : undefined,
+          }}
+        >
+          <IconLoop size={15} />
+        </button>
+      )}
+    </div>
   );
 }
 

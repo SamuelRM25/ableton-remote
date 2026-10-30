@@ -1,6 +1,5 @@
 import {
   IconBook,
-  IconSong,
   IconStage,
   IconLyrics,
   IconMacro,
@@ -17,7 +16,6 @@ export type ViewId =
   | "session"
   | "pads"
   | "mixer"
-  | "song"
   | "device"
   | "stage"
   | "setlist"
@@ -36,10 +34,9 @@ const NAV: NavItem[] = [
   { id: "session", label: "Session", Icon: IconSession },
   { id: "pads", label: "Pads", Icon: IconPads },
   { id: "mixer", label: "Mixer", Icon: IconMixer },
-  { id: "song", label: "Canción", Icon: IconSong },
+  { id: "setlist", label: "Setlist", Icon: IconSetlist },
   { id: "device", label: "Device", Icon: IconMacro },
   { id: "stage", label: "Escenario", Icon: IconStage },
-  { id: "setlist", label: "Setlist", Icon: IconSetlist },
   { id: "lyrics", label: "Lyrics", Icon: IconLyrics },
   { id: "settings", label: "Settings", Icon: IconSettings },
   { id: "manual", label: "Manual", Icon: IconBook },

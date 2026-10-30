@@ -12,9 +12,9 @@ import { SessionView } from "./views/SessionView";
 import { PadsView } from "./views/PadsView";
 import { MixerView } from "./views/MixerView";
 import { DeviceHub } from "./views/DeviceHub";
-import { SongView } from "./views/SongView";
+import { SetlistHub } from "./views/SetlistHub";
+import { SetlistChain } from "./lib/setlist-chain";
 import { StageView } from "./views/StageView";
-import { SetlistView } from "./views/SetlistView";
 import { LyricsView } from "./views/LyricsView";
 import { SettingsView } from "./views/SettingsView";
 import { ManualView } from "./views/ManualView";
@@ -24,7 +24,6 @@ const VIEW_TITLES: Record<ViewId, string> = {
   session: "Session",
   pads: "Pads",
   mixer: "Mixer",
-  song: "Canción",
   device: "Device",
   stage: "Escenario",
   setlist: "Setlist",
@@ -85,6 +84,7 @@ export function App() {
     return (
       <div className="h-full w-full bg-bg text-text-1">
         <StageView standalone />
+        <SetlistChain client={client} />
         <Toasts />
       </div>
     );
@@ -100,10 +100,9 @@ export function App() {
           {view === "session" && <SessionView />}
           {view === "pads" && <PadsView />}
           {view === "mixer" && <MixerView />}
-          {view === "song" && <SongView client={client} />}
           {view === "device" && <DeviceHub />}
           {view === "stage" && <StageView />}
-          {view === "setlist" && <SetlistView />}
+          {view === "setlist" && <SetlistHub client={client} />}
           {view === "lyrics" && <LyricsView />}
           {view === "settings" && <SettingsView />}
           {view === "manual" && <ManualView />}
@@ -112,6 +111,7 @@ export function App() {
       <TransportBar />
       {isMobile && <SideRail active={view} onSelect={setView} mobile />}
       {!gateDismissed && <ConnectionGate onDismiss={() => setGateDismissed(true)} />}
+      <SetlistChain client={client} />
       <Toasts />
     </div>
   );

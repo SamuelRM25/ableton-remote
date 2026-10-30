@@ -24,10 +24,12 @@ export function TopBar({ view }: Props) {
   const clock = useSongClock(client);
   const recording = !!useLiveProp<boolean>(client, (c) => c.song, "record_mode");
   const countingIn = !!useLiveProp<boolean>(client, (c) => c.song, "is_counting_in");
-  const cpu = useLiveProp<number>(client, (c) => c.application, "average_process_usage", {
+  // Live reports this in percent (0–100), not as a 0–1 fraction.
+  const cpuPct = useLiveProp<number>(client, (c) => c.application, "average_process_usage", {
     listen: false,
     pollMs: 1000,
   });
+  const cpu = cpuPct === undefined ? undefined : Math.max(0, Math.min(1, cpuPct / 100));
 
   // Beat-synced CSS animations follow Live's tempo.
   useEffect(() => {

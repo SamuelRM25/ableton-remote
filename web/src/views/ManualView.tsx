@@ -87,22 +87,35 @@ const SECTIONS: Section[] = [
     ),
   },
   {
-    title: "Canción: las partes de cada canción",
+    title: "Setlist · En vivo: las partes de cada canción",
     body: (
       <>
         <p>
-          Pensado para sets con una pista de canciones (un clip MIDI vacío por
-          canción, con su nombre) y una pista de partes (clips vacíos llamados
-          Intro, Verso, Coro…). En <strong>Pistas</strong> eliges cuál es cada
-          una y si un pad lanza solo el clip o la escena completa.
+          Setlist tiene tres pestañas: <strong>En vivo</strong>, <strong>Armar</strong> y <strong>Marcas</strong>.
+          En <strong>Pistas</strong> eliges la pista MIDI de canciones (un clip por canción, con su nombre)
+          y de dónde salen las partes: otra <strong>pista MIDI</strong> con clips por parte, o los
+          <strong> marcadores de Live</strong> que caen dentro de cada canción.
         </p>
         <ul>
           <li>Los clips pueden estar en la <strong>Session</strong> o en el <strong>Arreglo</strong>; la app detecta dónde están.</li>
-          <li>Arriba aparecen tus canciones; al elegir una, los pads muestran sus partes: los clips de la pista de partes que caen dentro de esa canción.</li>
-          <li>En el <strong>Arreglo</strong>, tocar una parte mueve la reproducción a esa parte <strong>en el siguiente compás</strong> (sin salirse del tiempo); si está parado, solo la deja lista para Play.</li>
-          <li><strong>Elegir partes</strong>: las escoges a mano y en el orden que quieras (se guarda por canción). <strong>Automático</strong> vuelve al modo por escenas.</li>
-          <li><strong>Seguir a Live</strong>: cambia de canción sola cuando Live toca otra.</li>
-          <li>El pad que suena brilla, el que está en cola parpadea y el siguiente tiene borde punteado («Sigue»).</li>
+          <li>Arriba van tus canciones (en el orden del setlist activo) con su duración. ◀ / ▶▶ pasan a la anterior / siguiente.</li>
+          <li>En el <strong>Arreglo</strong>, tocar una parte mueve la reproducción ahí <strong>en el siguiente compás</strong>, sin salirse del tiempo; si está parado, la deja lista para Play.</li>
+          <li>⟳ en cada parte = <em>Loop hasta el siguiente localizador</em> para esa parte. Tócalo otra vez para quitarlo.</li>
+          <li><strong>Encadenar</strong>: al terminar una canción salta sola, a tiempo, al inicio de la siguiente del setlist (aunque esté en otro lugar del arreglo).</li>
+          <li><strong>Seguir a Live</strong>: cambia de canción sola según lo que suena. <strong>Elegir partes</strong>: escoges a mano cuáles y en qué orden.</li>
+        </ul>
+      </>
+    ),
+  },
+  {
+    title: "Setlist · Armar: el orden y el tiempo del set",
+    body: (
+      <>
+        <ul>
+          <li>A la derecha están las canciones de tu pista; <strong>+</strong> las agrega al setlist. <strong>Todas</strong> las pone en el orden del set.</li>
+          <li>Duración = largo del clip MIDI de la canción ÷ su BPM. Si una canción va a otro tempo, escríbelo en su casilla BPM (Live no deja leer la automatización de tempo).</li>
+          <li>Con <strong>Tiempo disponible</strong> ves cuánto te sobra o te pasas. Cada canción dice a qué minuto empieza.</li>
+          <li>Puedes tener varios setlists (+ Nuevo, Renombrar, Borrar). Se guardan dentro del proyecto de Live, así que el iPad y el teléfono ven lo mismo.</li>
         </ul>
       </>
     ),
@@ -159,7 +172,7 @@ const SECTIONS: Section[] = [
     ),
   },
   {
-    title: "Setlist: canciones y marcas",
+    title: "Setlist · Marcas: los localizadores de Live",
     body: (
       <>
         <ul>

@@ -7,7 +7,7 @@ import { toast } from "../lib/toast";
 import { Fader } from "../components/Fader";
 import { DevicePicker } from "../components/DevicePicker";
 
-export function DeviceView() {
+export function DeviceView({ switcher }: { switcher?: React.ReactNode } = {}) {
   const client = useAbleton();
   const [device, setDevice] = useState<any>(null);
   const [version, setVersion] = useState(0);
@@ -66,8 +66,9 @@ export function DeviceView() {
           </span>
         </div>
         <div className="flex-1" />
+        {switcher}
         {parameters && (
-          <span className="value-mono" style={{ fontSize: 12, color: "var(--color-text-3)" }}>
+          <span className="value-mono hidden xl:inline" style={{ fontSize: 12, color: "var(--color-text-3)" }}>
             {parameters.length} parámetros
           </span>
         )}

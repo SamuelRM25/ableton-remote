@@ -7,7 +7,7 @@ import { toast } from "../lib/toast";
 import { Knob } from "../components/Knob";
 import { DevicePicker } from "../components/DevicePicker";
 
-export function MacrosView() {
+export function MacrosView({ switcher }: { switcher?: React.ReactNode } = {}) {
   const client = useAbleton();
   const [device, setDevice] = useState<any>(null);
   const [version, setVersion] = useState(0);
@@ -67,6 +67,7 @@ export function MacrosView() {
           </span>
         </div>
         <div className="flex-1" />
+        {switcher}
         {power && <PowerKey param={power} />}
       </ViewStrip>
       <DevicePicker client={client} />

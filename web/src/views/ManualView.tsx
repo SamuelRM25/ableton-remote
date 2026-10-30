@@ -76,29 +76,49 @@ const SECTIONS: Section[] = [
     body: (
       <>
         <p>
-          Hay dos modos arriba: <strong>Canción</strong> y <strong>Libre 8×8</strong>.
-        </p>
-        <p>
-          <strong>Canción</strong>: pensado para sets con una pista de canciones
-          (un clip MIDI vacío por canción, con su nombre) y una pista de partes
-          (clips vacíos llamados Intro, Verso, Coro…). En <strong>Pistas</strong>
-          eliges cuál es cada una. Arriba aparecen tus canciones; al elegir una,
-          los pads muestran sus partes: los clips de la pista de partes desde la
-          escena de la canción hasta la siguiente canción. Con
-          <strong> Elegir partes</strong> las escoges a mano y en el orden que
-          quieras (se guarda por canción; <strong>Automático</strong> vuelve al
-          modo por escenas). <strong>Seguir a Live</strong> cambia de canción
-          sola cuando Live toca otra. El pad que suena brilla, el que está en
-          cola parpadea y el siguiente aparece con borde punteado. En Pistas
-          eliges si el pad lanza solo el clip o la escena completa.
-        </p>
-        <p>
-          <strong>Libre 8×8</strong>: 64 pads reasignables para disparar clips sin mirar la cuadrícula.
+          64 pads reasignables para disparar clips sin mirar la cuadrícula.
           Toca <strong>Asignar</strong>, luego toca el pad que quieras, elige
           track y escena y pulsa <strong>Asignar</strong> (salta solo al pad
           siguiente). <strong>Vaciar</strong> lo libera y <strong>Auto 8×8</strong>
           copia las primeras 8 pistas × 8 escenas de la Session. Cada pad se
           retroilumina con el color del clip y brilla mientras suena.
+        </p>
+      </>
+    ),
+  },
+  {
+    title: "Canción: las partes de cada canción",
+    body: (
+      <>
+        <p>
+          Pensado para sets con una pista de canciones (un clip MIDI vacío por
+          canción, con su nombre) y una pista de partes (clips vacíos llamados
+          Intro, Verso, Coro…). En <strong>Pistas</strong> eliges cuál es cada
+          una y si un pad lanza solo el clip o la escena completa.
+        </p>
+        <ul>
+          <li>Arriba aparecen tus canciones; al elegir una, los pads muestran sus partes: los clips de la pista de partes desde la escena de la canción hasta la siguiente canción.</li>
+          <li><strong>Elegir partes</strong>: las escoges a mano y en el orden que quieras (se guarda por canción). <strong>Automático</strong> vuelve al modo por escenas.</li>
+          <li><strong>Seguir a Live</strong>: cambia de canción sola cuando Live toca otra.</li>
+          <li>El pad que suena brilla, el que está en cola parpadea y el siguiente tiene borde punteado («Sigue»).</li>
+        </ul>
+      </>
+    ),
+  },
+  {
+    title: "Escenario: para que la banda lo lea de lejos",
+    body: (
+      <>
+        <p>
+          Canción, parte que suena (enorme, con su color), la que sigue y luces
+          de tiempo (la roja es el 1 de cada compás). Usa las pistas de la vista
+          Canción; si no están configuradas, usa las marcas del arreglo y cuenta
+          cuántos compases faltan para la siguiente.
+        </p>
+        <p>
+          En otro iPad o teléfono abre la misma dirección terminada en
+          <code> #escenario</code> (por ejemplo <code>http://192.168.1.94:39031/#escenario</code>):
+          solo se ve esta pantalla, sin menús.
         </p>
       </>
     ),
@@ -119,7 +139,7 @@ const SECTIONS: Section[] = [
     ),
   },
   {
-    title: "Macros y Device: elige y mueve",
+    title: "Device: macros y parámetros",
     body: (
       <>
         <p>
@@ -129,8 +149,9 @@ const SECTIONS: Section[] = [
           seleccionado también en Live.
         </p>
         <ul>
-          <li><strong>Macros</strong> = encoders grandes de los primeros parámetros (en un Rack son los 8 macros). Arrastra vertical para mover.</li>
-          <li><strong>Device</strong> = TODOS los parámetros con sliders o selectores, con su valor real.</li>
+          <li>Arriba a la derecha cambias entre <strong>Macros</strong> y <strong>Parámetros</strong> del mismo device.</li>
+          <li><strong>Macros</strong> = knobs grandes de los primeros parámetros (en un Rack son sus macros). Arrastra vertical para mover; doble toque vuelve al valor inicial.</li>
+          <li><strong>Parámetros</strong> = TODOS los parámetros con sliders o selectores, con su valor real.</li>
         </ul>
       </>
     ),
@@ -145,7 +166,7 @@ const SECTIONS: Section[] = [
           <li><strong>+ Canción</strong> crea un grupo; con el selector <strong>Canción…</strong> de cada marca la asignas. Doble-tap al nombre para renombrar (el nombre vive en la app: Live no deja renombrar cues).</li>
           <li><strong>＋ en la canción</strong> = crear marca aquí sin escribir: eliges el momento y se crea en Live, se nombra sola en orden (<em>1 - Intro</em>, <em>2 - Verso</em>…) y queda asignada. El menú sugiere el siguiente momento lógico y tiene ★ <strong>favoritas</strong> arriba para las partes que más se repiten (tócale la estrella a cualquier parte para fijarla). Con <strong>+ Nuevo</strong> agregas tus propios momentos. Si el playhead está justo sobre otra marca, avisa y no hace nada (para no borrarla sin querer).</li>
           <li><strong>⟳ en cada marca</strong> = <em>Loop hasta la siguiente marca</em>, igual que la opción del menú de los localizadores en Live: el loop del arreglo va desde esa marca hasta la siguiente y se activa. El botón se ilumina mientras corre; tócalo otra vez para quitar el loop. En la última marca no hay siguiente, así que no hace nada (Live tampoco lo permite).</li>
-          <li><strong>Metrónomo en cada marca</strong> = entrar con conteo (muestra el tempo real que está usando, ej. ♩=135 · 4/4): cuenta un compás en pantalla al tempo y compás actuales y al terminar salta y reproduce <em>con el click de Live encendido</em> (luego lo restaura como estaba). Ojo honesto: Live no tiene conteo para reproducir normal (solo graba con conteo), así que el conteo es visual y el click suena desde el primer beat de la parte. Tócalo de nuevo para cancelar.</li>
+          <li><strong>Metrónomo en cada marca</strong> = entrar con conteo (muestra el tempo real que está usando, ej. ♩=135 · 4/4): cuenta un compás en pantalla al tempo y compás actuales y al terminar salta y reproduce <em>con el click de Live encendido</em> (luego lo restaura como estaba). Si Live ya está sonando, el conteo <strong>se acopla al compás en curso</strong>: si tocas en el tiempo 3 de 4, cuenta solo 3 y 4 y entra justo en el siguiente 1, sin desfasarse. Si está parado, cuenta un compás completo. Live no tiene conteo para reproducir normal, así que el conteo es visual y el click suena para ayudarte. Tócalo de nuevo para cancelar.</li>
           <li>Cada proyecto de Live tiene <strong>su propio setlist</strong>: al abrir otro set, ves solo sus marcas (arriba dice de qué proyecto son).</li>
 <li><strong>✕ borra también en Live</strong> (salta a la marca y la elimina; deshaces con ⌘Z en Live). Si está sonando, el primer toque avisa (hay que pausar para borrar) y el segundo ejecuta. Las manuales solo se borran aquí.</li>
           <li>La <strong>flecha de cada canción la retrae</strong> para no llenar la pantalla; el <strong>lápiz ✎</strong> renombra sin doble-tap (en iPad el doble-tap no es fiable).</li>

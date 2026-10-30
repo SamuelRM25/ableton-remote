@@ -427,14 +427,19 @@ export function SetlistView() {
   }
 
   /**
-   * Count-in entry: count one bar SILENTLY on screen (Live has no
-   * count-in for plain playback — verified against Live 12.0.2), then
-   * jump + play with Live's click forced on so it's audible from the
-   * downbeat. The previous click state is restored one bar later.
+   * Count-in entry.
    *
-   * Timing: absolute performance.now() deadlines (no chained drift),
-   * and the entry fires ENTRY_LEAD_MS early to absorb network round-trip
-   * so the downbeat lands on the beat, not after it.
+   * Stopped: counts one bar on screen, then jumps + plays with Live's click
+   * forced on (Live has no count-in for plain playback).
+   *
+   * Playing: locks to the bar that is already running. If you tap on beat 3
+   * of 4, it counts only the beats left (3, 4) and enters on the next
+   * downbeat — never a fresh 4-beat count that would put you off the grid.
+   * The jump is RELATIVE to that downbeat (jump_by(cue − downbeat)), so the
+   * phase is exact even if the command reaches Live a few ms early or late.
+   *
+   * Units: Live's tempo is in quarter notes and its positions in quarter-note
+   * beats; one signature beat is 4/den quarters (an eighth in 6/8).
    */
   async function handleCountInPlay(item: SetlistItem) {
     if (!client) return;
@@ -442,35 +447,80 @@ export function SetlistView() {
     setActiveId(item.id);
     lastFollowedRef.current = item.id;
     try {
-      const [tempoRaw, sigRaw, sigDenRaw, prevClick] = await Promise.all([
+      const asked = performance.now();
+      const [tempoRaw, sigRaw, sigDenRaw, prevClick, playing, posRaw] = await Promise.all([
         client.song.get("tempo"),
         client.song.get("signature_numerator"),
         client.song.get("signature_denominator").catch(() => 4),
         client.song.get("metronome"),
+        client.song.get("is_playing"),
+        client.song.get("current_song_time"),
       ]);
+      const answered = performance.now();
       const tempo = tempoRaw > 0 ? tempoRaw : 120;
-      const beats = sigRaw > 0 ? Math.floor(sigRaw) : 4;
+      const num = sigRaw > 0 ? Math.floor(sigRaw) : 4;
       const den = sigDenRaw > 0 ? Math.floor(sigDenRaw) : 4;
-      const beatMs = 60000 / tempo;
-      const t0 = performance.now();
-      const ENTRY_LEAD_MS = 150;
+      const quarterMs = 60000 / tempo;
+      const beatQ = 4 / den; // one signature beat, in quarter notes
+      const barQ = num * beatQ;
+      const beatMs = quarterMs * beatQ;
+      const ENTRY_LEAD_MS = 120;
       const show = (left: number) =>
         setCountIn({
           name: item.name,
           beatsLeft: left,
-          total: beats,
+          total: num,
           tempo: Math.round(tempo * 100) / 100,
-          signature: `${beats}/${den}`,
+          signature: `${num}/${den}`,
         });
-      show(beats);
-      for (let k = 1; k < beats; k++) {
-        const id = window.setTimeout(
-          () => show(beats - k),
-          Math.max(0, k * beatMs),
-        );
-        countTimers.current.push(id);
+      const restoreClick = (afterMs: number) => {
+        if (prevClick) return;
+        window.setTimeout(() => {
+          void client.song.set("metronome", false as any).catch(() => {});
+        }, afterMs);
+      };
+
+      if (playing) {
+        // Where the playhead is right now (the reply took ~half the round trip).
+        const pos = Number(posRaw) + ((answered - asked) / 2 + (performance.now() - answered)) / quarterMs;
+        let remainingQ = barQ - (((pos % barQ) + barQ) % barQ);
+        // Too close to the downbeat to react: enter on the following one.
+        if (remainingQ * quarterMs < 250) remainingQ += barQ;
+        const nextDownbeat = pos + remainingQ;
+        const t0 = performance.now();
+        const untilDownbeatMs = remainingQ * quarterMs;
+        const beatsLeft = Math.ceil(remainingQ / beatQ - 1e-6);
+
+        if (!prevClick) void client.song.set("metronome", true as any).catch(() => {});
+        show(beatsLeft);
+        // Update the big number on every beat line until the downbeat.
+        const firstLineMs = (remainingQ - (beatsLeft - 1) * beatQ) * quarterMs;
+        for (let k = 1; k < beatsLeft; k++) {
+          const at = firstLineMs + (k - 1) * beatMs;
+          countTimers.current.push(window.setTimeout(() => show(beatsLeft - k), Math.max(0, at - (performance.now() - t0))));
+        }
+        const fireId = window.setTimeout(() => {
+          countTimers.current = [];
+          setCountIn(null);
+          void client.song
+            .jumpBy(item.time - nextDownbeat)
+            .then(async () => {
+              // jump_by is unquantized and keeps playing; this is just a
+              // safety net in case the transport stopped meanwhile.
+              if (!(await client.song.get("is_playing"))) await client.song.continuePlaying();
+              restoreClick(barQ * quarterMs);
+            })
+            .catch(() => toast("No se pudo entrar en la marca"));
+        }, Math.max(0, untilDownbeatMs - ENTRY_LEAD_MS - (performance.now() - t0)));
+        countTimers.current.push(fireId);
+        return;
       }
-      const fireIn = Math.max(0, beats * beatMs - ENTRY_LEAD_MS);
+
+      // Stopped: one full bar on screen, then play from the cue.
+      show(num);
+      for (let k = 1; k < num; k++) {
+        countTimers.current.push(window.setTimeout(() => show(num - k), Math.max(0, k * beatMs)));
+      }
       const fireId = window.setTimeout(() => {
         countTimers.current = [];
         setCountIn(null);
@@ -478,16 +528,12 @@ export function SetlistView() {
           try {
             if (!prevClick) await client.song.set("metronome", true as any);
             await playFromTime(client, item.time);
-            if (!prevClick) {
-              window.setTimeout(() => {
-                void client.song.set("metronome", false as any).catch(() => {});
-              }, beatMs * beats);
-            }
+            restoreClick(barQ * quarterMs);
           } catch {
             toast("No se pudo reproducir desde la marca");
           }
         })();
-      }, fireIn);
+      }, Math.max(0, num * beatMs - ENTRY_LEAD_MS));
       countTimers.current.push(fireId);
     } catch {
       toast("No se pudo iniciar el conteo");

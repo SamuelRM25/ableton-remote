@@ -4,24 +4,12 @@ import { useLiveRawList, useLiveChildProp } from "../lib/list-hooks";
 import { colorToHex } from "../lib/color";
 import { toast } from "../lib/toast";
 import { EmptyPanel, LedKey, ViewStrip } from "../components/hw";
-import { SongPads } from "../components/SongPads";
 
 interface PadBinding {
   trackId: string;
   sceneIdx: number;
   /** Track name: Live's ids change on every restart, the name doesn't. */
   trackName?: string;
-}
-
-const MODE_KEY = "ableton-remote.pads.mode";
-type PadsMode = "free" | "song";
-
-function loadMode(): PadsMode {
-  try {
-    return localStorage.getItem(MODE_KEY) === "song" ? "song" : "free";
-  } catch {
-    return "free";
-  }
 }
 
 const STORAGE_KEY = "ableton-remote.pads.v1";
@@ -48,24 +36,9 @@ function saveBindings(b: PadBinding[]) {
 }
 
 export function PadsView() {
-  const client = useAbleton();
-  const [mode, setModeState] = useState<PadsMode>(loadMode);
-  const setMode = (m: PadsMode) => {
-    setModeState(m);
-    try {
-      localStorage.setItem(MODE_KEY, m);
-    } catch {
-      // ignore
-    }
-  };
   const modeSwitch = (
-    <div className="flex items-center gap-1.5">
-      <span style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 16, letterSpacing: "0.06em", marginRight: 6 }}>Pads</span>
-      <LedKey size="sm" variant="ring" color="cue" active={mode === "song"} label="Canción" onClick={() => setMode("song")} />
-      <LedKey size="sm" variant="ring" color="cue" active={mode === "free"} label="Libre 8×8" onClick={() => setMode("free")} />
-    </div>
+    <span style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 16, letterSpacing: "0.06em" }}>Pads</span>
   );
-  if (client && mode === "song") return <SongPads client={client} modeSwitch={modeSwitch} />;
   return <FreePads modeSwitch={modeSwitch} />;
 }
 

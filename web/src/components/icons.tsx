@@ -343,3 +343,23 @@ export function IconCpu(props: IconProps) {
     </svg>
   );
 }
+
+export function IconSong(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M9 18V6l10-2v12" />
+      <circle cx="6.5" cy="18" r="2.5" />
+      <circle cx="16.5" cy="16" r="2.5" />
+    </svg>
+  );
+}
+
+export function IconStage(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <rect x="3" y="4" width="18" height="12" rx="1.5" />
+      <path d="M7 20h10M12 16v4" />
+      <path d="M7 9h6M7 12h10" />
+    </svg>
+  );
+}

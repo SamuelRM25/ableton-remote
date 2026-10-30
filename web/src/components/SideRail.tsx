@@ -1,6 +1,7 @@
 import {
   IconBook,
-  IconDevice,
+  IconSong,
+  IconStage,
   IconLyrics,
   IconMacro,
   IconMixer,
@@ -16,8 +17,9 @@ export type ViewId =
   | "session"
   | "pads"
   | "mixer"
-  | "macros"
+  | "song"
   | "device"
+  | "stage"
   | "setlist"
   | "lyrics"
   | "settings"
@@ -34,8 +36,9 @@ const NAV: NavItem[] = [
   { id: "session", label: "Session", Icon: IconSession },
   { id: "pads", label: "Pads", Icon: IconPads },
   { id: "mixer", label: "Mixer", Icon: IconMixer },
-  { id: "macros", label: "Macros", Icon: IconMacro },
-  { id: "device", label: "Device", Icon: IconDevice },
+  { id: "song", label: "Canción", Icon: IconSong },
+  { id: "device", label: "Device", Icon: IconMacro },
+  { id: "stage", label: "Escenario", Icon: IconStage },
   { id: "setlist", label: "Setlist", Icon: IconSetlist },
   { id: "lyrics", label: "Lyrics", Icon: IconLyrics },
   { id: "settings", label: "Settings", Icon: IconSettings },
@@ -72,7 +75,7 @@ export function SideRail({ active, onSelect, mobile }: Props) {
   return (
     <nav
       aria-label="Vistas"
-      className="shrink-0 flex flex-col items-stretch py-3 px-2 gap-1.5 overflow-y-auto scroll-touch"
+      className="shrink-0 flex flex-col items-stretch py-2 px-2 gap-1 overflow-y-auto scroll-touch"
       style={{
         width: 84,
         background: "linear-gradient(90deg, #17181b, #1c1e22)",
@@ -105,9 +108,9 @@ function RailKey({
       aria-current={active ? "page" : undefined}
       className="tactile relative flex flex-col items-center justify-center shrink-0"
       style={{
-        gap: compact ? 3 : 5,
+        gap: 3,
         minWidth: compact ? 64 : undefined,
-        padding: compact ? "7px 6px 6px" : "10px 4px 8px",
+        padding: compact ? "7px 6px 6px" : "8px 4px 6px",
         borderRadius: 9,
         background: active
           ? "linear-gradient(180deg, #3a3e46, #2b2e34)"
@@ -140,7 +143,7 @@ function RailKey({
           filter: active ? `drop-shadow(0 0 5px color-mix(in srgb, ${led} 60%, transparent))` : undefined,
         }}
       >
-        <Icon size={compact ? 19 : 21} />
+        <Icon size={compact ? 19 : 20} />
       </span>
       <span
         className="label-cap"

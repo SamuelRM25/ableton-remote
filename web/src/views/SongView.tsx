@@ -1,235 +1,24 @@
 /**
- * "Canción" mode of the Pads view.
- *
- * Built for sets organised like this:
- *   - a SONG track: one (usually empty) MIDI clip per song, named after it;
- *   - a PARTS track: many empty MIDI clips named after the parts of each
- *     song (Intro, Verso, Coro…), in the scenes below that song's clip.
- *
- * The pads show the parts of the song that is selected (or the one Live is
- * playing, when "Seguir a Live" is on). By default the parts of a song are
- * the PARTS-track clips from the song's scene down to the next song; any
- * song can override that with a hand-picked list ("Elegir partes").
+ * "Canción" view: pads for the parts of the current song.
+ * See lib/song-structure.ts for how songs and parts are read from Live.
  */
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Ableton } from "ableton-js";
 import { useLiveRawList } from "../lib/list-hooks";
 import { colorToHex } from "../lib/color";
 import { toast } from "../lib/toast";
-import { EmptyPanel, Led, LedKey, ViewStrip } from "./hw";
+import { useSongStructure, type SessionClip, type SongConfig } from "../lib/song-structure";
+import { EmptyPanel, Led, LedKey, ViewStrip } from "../components/hw";
 
-/* ------------------------------------------------------------------ */
-/* Persistence                                                         */
-/* ------------------------------------------------------------------ */
-
-interface PartRef {
-  name: string;
-  scene: number;
-}
-
-interface SongPadsConfig {
-  /** Track NAMES (Live's internal ids change every time Live restarts). */
-  songTrack: string;
-  partsTrack: string;
-  launch: "clip" | "scene";
-  follow: boolean;
-  /** Hand-picked parts per song, keyed by the song clip's name. */
-  picks: Record<string, PartRef[]>;
-}
-
-const CONFIG_KEY = "ableton-remote.songpads.v1";
-
-function loadConfig(): SongPadsConfig {
-  const empty: SongPadsConfig = { songTrack: "", partsTrack: "", launch: "clip", follow: true, picks: {} };
-  try {
-    const raw = localStorage.getItem(CONFIG_KEY);
-    return raw ? { ...empty, ...(JSON.parse(raw) as Partial<SongPadsConfig>) } : empty;
-  } catch {
-    return empty;
-  }
-}
-
-function saveConfig(c: SongPadsConfig) {
-  try {
-    localStorage.setItem(CONFIG_KEY, JSON.stringify(c));
-  } catch {
-    // storage unavailable — config lives for this session only
-  }
-}
-
-/* ------------------------------------------------------------------ */
-/* Live data helpers                                                   */
-/* ------------------------------------------------------------------ */
-
-interface SessionClip {
-  scene: number;
-  name: string;
-  color: number | null;
-  clip_id: string;
-  slot_id: string;
-}
-
-/**
- * All clips of one track's Session column, refreshed every few seconds
- * (renames and new clips have no single listener in Live). Uses the MIDI
- * script's one-shot `session_clips`; falls back to walking the slots on an
- * older script.
- */
-function useSessionClips(client: Ableton, trackId: string | null): SessionClip[] | null {
-  const [clips, setClips] = useState<SessionClip[] | null>(null);
-  const sig = useRef("");
-
-  useEffect(() => {
-    sig.current = "";
-    setClips(null);
-    if (!trackId) return;
-    let cancelled = false;
-
-    const read = async (): Promise<SessionClip[]> => {
-      try {
-        const list = await client.getProp("track", trackId, "session_clips");
-        if (Array.isArray(list)) return list as SessionClip[];
-      } catch {
-        // older MIDI script: fall through
-      }
-      const slots: any[] = await client.getProp("track", trackId, "clip_slots");
-      const out: SessionClip[] = [];
-      for (let i = 0; i < slots.length; i++) {
-        if (!slots[i]?.has_clip) continue;
-        const c = await client.getProp("clip_slot", slots[i].id, "clip");
-        if (c) out.push({ scene: i, name: c.name, color: c.color, clip_id: c.id, slot_id: slots[i].id });
-      }
-      return out;
-    };
-
-    const tick = async () => {
-      try {
-        const list = await read();
-        if (cancelled) return;
-        const s = list.map((c) => `${c.scene}:${c.name}:${c.color}`).join("|");
-        if (s !== sig.current) {
-          sig.current = s;
-          setClips(list);
-        }
-      } catch {
-        if (!cancelled) setClips((prev) => prev ?? []);
-      }
-    };
-    void tick();
-    const timer = window.setInterval(tick, 3000);
-    return () => {
-      cancelled = true;
-      window.clearInterval(timer);
-    };
-  }, [client, trackId]);
-
-  return clips;
-}
-
-/** One listenable prop of a track, by raw id. */
-function useTrackProp<T>(client: Ableton, trackId: string | null, prop: string): T | undefined {
-  const [value, setValue] = useState<T | undefined>(undefined);
-  useEffect(() => {
-    setValue(undefined);
-    if (!trackId) return;
-    let cancelled = false;
-    let off: (() => Promise<unknown>) | null = null;
-    (async () => {
-      try {
-        const v = await client.getProp("track", trackId, prop);
-        if (!cancelled) setValue(v as T);
-        const unsub = await client.addPropListener("track", trackId, prop, (next: T) => {
-          if (!cancelled) setValue(next);
-        });
-        if (cancelled) void unsub().catch(() => {});
-        else off = unsub;
-      } catch {
-        // ignore
-      }
-    })();
-    return () => {
-      cancelled = true;
-      if (off) void off().catch(() => {});
-    };
-  }, [client, trackId, prop]);
-  return value;
-}
-
-/* ------------------------------------------------------------------ */
-/* Component                                                           */
-/* ------------------------------------------------------------------ */
-
-export function SongPads({ client, modeSwitch }: { client: Ableton; modeSwitch: React.ReactNode }) {
-  const rawTracks = useLiveRawList<any>("song", "tracks");
+export function SongView({ client }: { client: Ableton | null }) {
   const rawScenes = useLiveRawList<any>("song", "scenes");
-  const [config, setConfigState] = useState<SongPadsConfig>(loadConfig);
+  const st = useSongStructure(client);
+  const { config, setConfig, song, songs, parts } = st;
   const [setupOpen, setSetupOpen] = useState(false);
   const [picking, setPicking] = useState(false);
-  const [selectedScene, setSelectedScene] = useState<number | null>(null);
-
-  const setConfig = (next: SongPadsConfig) => {
-    setConfigState(next);
-    saveConfig(next);
-  };
-
-  const trackByName = (name: string) =>
-    name ? (rawTracks ?? []).find((t: any) => t.name === name) ?? null : null;
-  const songTrack = trackByName(config.songTrack);
-  const partsTrack = trackByName(config.partsTrack);
-  const songTrackId: string | null = songTrack ? String(songTrack.id) : null;
-  const partsTrackId: string | null = partsTrack ? String(partsTrack.id) : null;
-
-  const songs = useSessionClips(client, songTrackId);
-  const parts = useSessionClips(client, partsTrackId);
-
-  const songPlaying = useTrackProp<number>(client, songTrackId, "playing_slot_index");
-  const partPlaying = useTrackProp<number>(client, partsTrackId, "playing_slot_index");
-  const partFired = useTrackProp<number>(client, partsTrackId, "fired_slot_index");
-
-  // Which song owns a given scene: the last song clip at or above it.
-  const songForScene = (scene: number): SessionClip | null => {
-    let found: SessionClip | null = null;
-    for (const s of songs ?? []) if (s.scene <= scene) found = s;
-    return found;
-  };
-
-  // Follow Live: a playing song clip, or the song owning the playing part.
-  useEffect(() => {
-    if (!config.follow || !songs) return;
-    const fromSong = typeof songPlaying === "number" && songPlaying >= 0 ? songs.find((s) => s.scene === songPlaying) : null;
-    const fromPart = typeof partPlaying === "number" && partPlaying >= 0 ? songForScene(partPlaying) : null;
-    const target = fromSong ?? fromPart;
-    if (target) setSelectedScene(target.scene);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [config.follow, songs, songPlaying, partPlaying]);
-
-  // Default to the first song.
-  useEffect(() => {
-    if (selectedScene === null && songs && songs.length > 0) setSelectedScene(songs[0].scene);
-  }, [songs, selectedScene]);
-
-  const song = songs?.find((s) => s.scene === selectedScene) ?? null;
-  const nextSong = song && songs ? songs.find((s) => s.scene > song.scene) ?? null : null;
-
-  const autoParts = useMemo(() => {
-    if (!song || !parts) return [];
-    const end = nextSong ? nextSong.scene : Number.POSITIVE_INFINITY;
-    return parts.filter((p) => p.scene >= song.scene && p.scene < end);
-  }, [song, nextSong, parts]);
-
-  const picked = song ? config.picks[song.name] : undefined;
-  const padParts: SessionClip[] = useMemo(() => {
-    if (!picked || !parts) return autoParts;
-    const out: SessionClip[] = [];
-    for (const ref of picked) {
-      const exact = parts.find((p) => p.scene === ref.scene && p.name === ref.name);
-      const byName = exact ?? parts.find((p) => p.name === ref.name && (!song || p.scene >= song.scene));
-      if (byName) out.push(byName);
-    }
-    return out;
-  }, [picked, parts, autoParts, song]);
 
   async function launch(part: SessionClip) {
+    if (!client) return;
     try {
       if (config.launch === "scene") {
         const scene = rawScenes?.[part.scene];
@@ -244,7 +33,7 @@ export function SongPads({ client, modeSwitch }: { client: Ableton; modeSwitch: 
   }
 
   async function launchSong() {
-    if (!song) return;
+    if (!client || !song) return;
     try {
       await client.sendCommand({ ns: "clip_slot", nsid: song.slot_id, name: "fire" });
     } catch {
@@ -252,14 +41,21 @@ export function SongPads({ client, modeSwitch }: { client: Ableton; modeSwitch: 
     }
   }
 
-  const configured = !!songTrack && !!partsTrack;
-  const playingIdx = padParts.findIndex((p) => p.scene === partPlaying);
-  const nextPart = playingIdx >= 0 ? padParts[playingIdx + 1] : null;
+  const { configured } = st;
+  const reading =
+    configured && !st.tracksMissing && (st.songsState.kind === "loading" || st.partsState.kind === "loading");
+  const readError =
+    st.songsState.kind === "error" ? st.songsState.message : st.partsState.kind === "error" ? st.partsState.message : null;
 
   return (
     <div className="h-full flex flex-col">
       <ViewStrip>
-        {modeSwitch}
+        <span style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 16, letterSpacing: "0.06em" }}>Canción</span>
+        {song && (
+          <span className="truncate" style={{ fontSize: 14, color: "var(--color-text-2)" }}>
+            {song.name}
+          </span>
+        )}
         <div className="flex-1" />
         {configured && (
           <LedKey
@@ -278,29 +74,35 @@ export function SongPads({ client, modeSwitch }: { client: Ableton; modeSwitch: 
         <LedKey size="sm" variant="ring" color="white" active={setupOpen} label="Pistas" onClick={() => setSetupOpen((v) => !v)} />
       </ViewStrip>
 
-      {(setupOpen || !configured) && (
+      {(setupOpen || !configured || st.tracksMissing) && (
         <SetupPanel
-          tracks={(rawTracks ?? []).map((t: any) => String(t.name ?? ""))}
+          tracks={(st.rawTracks ?? []).map((t: any) => String(t.name ?? ""))}
           config={config}
-          onChange={(c) => setConfig(c)}
-          onDone={configured ? () => setSetupOpen(false) : undefined}
+          onChange={setConfig}
+          onDone={configured && !st.tracksMissing ? () => setSetupOpen(false) : undefined}
         />
       )}
 
       {configured && songs && songs.length > 0 && (
         <SongStrip
           songs={songs}
-          selected={selectedScene}
-          playing={typeof songPlaying === "number" ? songPlaying : -1}
+          selected={st.selectedScene}
+          playing={st.songPlaying}
           onSelect={(scene) => {
-            setSelectedScene(scene);
+            st.select(scene);
             setPicking(false);
           }}
         />
       )}
 
       <div className="flex-1 min-h-0 overflow-auto scroll-touch p-3 sm:p-5">
-        {!configured ? null : songs === null || parts === null ? (
+        {!client ? (
+          <EmptyPanel title="Live no está conectado" hint="La app se reconecta sola en cuanto Live responda." />
+        ) : !configured ? null : st.tracksMissing ? (
+          <EmptyPanel title="No encuentro esas pistas en el set" hint="¿Les cambiaste el nombre? Elígelas de nuevo en Pistas." />
+        ) : readError && !songs ? (
+          <EmptyPanel title="Live no devolvió los clips" hint={`${readError}. Se vuelve a intentar sola cada pocos segundos.`} />
+        ) : reading || !songs || !parts ? (
           <EmptyPanel title="Leyendo clips de Live…" />
         ) : songs.length === 0 ? (
           <EmptyPanel
@@ -313,8 +115,8 @@ export function SongPads({ client, modeSwitch }: { client: Ableton; modeSwitch: 
           <PartPicker
             song={song}
             parts={parts}
-            initial={padParts}
-            songForScene={songForScene}
+            initial={st.songParts}
+            songForScene={st.songForScene}
             onSave={(sel) => {
               setConfig({ ...config, picks: { ...config.picks, [song.name]: sel.map((p) => ({ name: p.name, scene: p.scene })) } });
               setPicking(false);
@@ -332,33 +134,27 @@ export function SongPads({ client, modeSwitch }: { client: Ableton; modeSwitch: 
         ) : (
           <div className="mx-auto" style={{ maxWidth: 1100 }}>
             <div className="flex items-center gap-3 mb-3 flex-wrap">
-              <LedKey size="md" color="play" variant="ring" active={songPlaying === song.scene} label={`▶ ${song.name}`} onClick={() => void launchSong()} style={{ textTransform: "none", fontSize: 15 }} />
+              <LedKey size="md" color="play" variant="ring" active={st.songPlaying === song.scene} label={`▶ ${song.name}`} onClick={() => void launchSong()} style={{ textTransform: "none", fontSize: 15 }} />
               <span style={{ fontSize: 13, color: "var(--color-text-2)" }}>
-                {padParts.length} {padParts.length === 1 ? "parte" : "partes"} · {picked ? "elegidas a mano" : "automáticas"} · {config.launch === "scene" ? "lanza la escena" : "lanza el clip"}
+                {st.songParts.length} {st.songParts.length === 1 ? "parte" : "partes"} · {st.picked ? "elegidas a mano" : "automáticas"} · {config.launch === "scene" ? "lanza la escena" : "lanza el clip"}
               </span>
             </div>
-            {padParts.length === 0 ? (
+            {st.songParts.length === 0 ? (
               <EmptyPanel
                 title="Esta canción no tiene partes"
-                hint={`Pon clips en «${config.partsTrack}» debajo de «${song.name}», o tócalas a mano con «Elegir partes».`}
+                hint={`Pon clips en «${config.partsTrack}» debajo de «${song.name}», o elígelas a mano con «Elegir partes».`}
               />
             ) : (
               <div className="panel" style={{ padding: 14, borderRadius: 16 }}>
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))",
-                    gap: 10,
-                  }}
-                >
-                  {padParts.map((p, i) => (
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: 10 }}>
+                  {st.songParts.map((p, i) => (
                     <PartPad
                       key={`${p.scene}-${p.name}`}
                       part={p}
                       index={i}
-                      playing={partPlaying === p.scene}
-                      queued={partFired === p.scene && partPlaying !== p.scene}
-                      isNext={nextPart === p}
+                      playing={st.partPlaying === p.scene}
+                      queued={st.partFired === p.scene && st.partPlaying !== p.scene}
+                      isNext={st.nextPart === p}
                       onPress={() => void launch(p)}
                     />
                   ))}
@@ -381,8 +177,8 @@ function SetupPanel({
   onDone,
 }: {
   tracks: string[];
-  config: SongPadsConfig;
-  onChange: (c: SongPadsConfig) => void;
+  config: SongConfig;
+  onChange: (c: SongConfig) => void;
   onDone?: () => void;
 }) {
   const sel = (label: string, value: string, key: "songTrack" | "partsTrack") => (

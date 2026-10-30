@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { abletonStore } from "./lib/ableton-store";
 import { Toasts } from "./lib/toast";
 import { useViewport } from "./lib/viewport";
-import { useConnectionStatus } from "./lib/hooks";
+import { useAbleton, useConnectionStatus } from "./lib/hooks";
 import { SideRail, type ViewId } from "./components/SideRail";
 import { TopBar } from "./components/TopBar";
 import { TransportBar } from "./components/TransportBar";
@@ -11,8 +11,9 @@ import { TransportView } from "./views/TransportView";
 import { SessionView } from "./views/SessionView";
 import { PadsView } from "./views/PadsView";
 import { MixerView } from "./views/MixerView";
-import { MacrosView } from "./views/MacrosView";
-import { DeviceView } from "./views/DeviceView";
+import { DeviceHub } from "./views/DeviceHub";
+import { SongView } from "./views/SongView";
+import { StageView } from "./views/StageView";
 import { SetlistView } from "./views/SetlistView";
 import { LyricsView } from "./views/LyricsView";
 import { SettingsView } from "./views/SettingsView";
@@ -23,16 +24,48 @@ const VIEW_TITLES: Record<ViewId, string> = {
   session: "Session",
   pads: "Pads",
   mixer: "Mixer",
-  macros: "Macros",
+  song: "Canción",
   device: "Device",
+  stage: "Escenario",
   setlist: "Setlist",
   lyrics: "Lyrics",
   settings: "Settings",
   manual: "Manual",
 };
 
+const VIEW_KEY = "ableton-remote.view";
+
+function loadView(): ViewId {
+  try {
+    const v = localStorage.getItem(VIEW_KEY) as ViewId | null;
+    return v && v in VIEW_TITLES ? v : "session";
+  } catch {
+    return "session";
+  }
+}
+
+function useHash(): string {
+  const [hash, setHash] = useState(() => window.location.hash);
+  useEffect(() => {
+    const on = () => setHash(window.location.hash);
+    window.addEventListener("hashchange", on);
+    return () => window.removeEventListener("hashchange", on);
+  }, []);
+  return hash;
+}
+
 export function App() {
-  const [view, setView] = useState<ViewId>("session");
+  const [view, setViewState] = useState<ViewId>(loadView);
+  const setView = (v: ViewId) => {
+    setViewState(v);
+    try {
+      localStorage.setItem(VIEW_KEY, v);
+    } catch {
+      // ignore
+    }
+  };
+  const client = useAbleton();
+  const hash = useHash();
   const [gateDismissed, setGateDismissed] = useState(false);
   const { isMobile } = useViewport();
   const status = useConnectionStatus();
@@ -47,6 +80,16 @@ export function App() {
     return () => abletonStore.getState().disconnect();
   }, []);
 
+  // Second device on stage: http://<mac>:39031/#escenario shows only this.
+  if (hash === "#escenario") {
+    return (
+      <div className="h-full w-full bg-bg text-text-1">
+        <StageView standalone />
+        <Toasts />
+      </div>
+    );
+  }
+
   return (
     <div className="h-full w-full flex flex-col bg-bg text-text-1">
       <TopBar view={VIEW_TITLES[view]} />
@@ -57,8 +100,9 @@ export function App() {
           {view === "session" && <SessionView />}
           {view === "pads" && <PadsView />}
           {view === "mixer" && <MixerView />}
-          {view === "macros" && <MacrosView />}
-          {view === "device" && <DeviceView />}
+          {view === "song" && <SongView client={client} />}
+          {view === "device" && <DeviceHub />}
+          {view === "stage" && <StageView />}
           {view === "setlist" && <SetlistView />}
           {view === "lyrics" && <LyricsView />}
           {view === "settings" && <SettingsView />}

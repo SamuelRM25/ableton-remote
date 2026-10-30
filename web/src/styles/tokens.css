@@ -1,0 +1,213 @@
+/* ========================================================================
+   Ableton Remote — design tokens
+   Aesthetic: boutique instrument controller. Multi-color accents tied to
+   function (mint=play, red=record, yellow=cue, lavender=macro, cyan=link).
+   Neutrals are warm graphite, never pure black, never blue-white.
+   ======================================================================== */
+
+@import "tailwindcss";
+
+@theme {
+  /* ---------- Surfaces (warm graphite) ---------- */
+  --color-bg: #0E0E10;
+  --color-surface-1: #15151A;
+  --color-surface-2: #1C1C22;
+  --color-surface-3: #25252D;
+  --color-surface-4: #2F2F38;
+  --color-border: #2D2D36;
+  --color-border-strong: #3A3A45;
+
+  /* ---------- Text (warm whites) ---------- */
+  --color-text-1: #F2EFE9;
+  --color-text-2: #98968E;
+  --color-text-3: #5A5860;
+  --color-text-inverse: #0E0E10;
+
+  /* ---------- Functional accents (the "instrument" colors) ---------- */
+  --color-accent-play: #00E5A0;       /* mint: playing, positive running state */
+  --color-accent-play-dim: #007A55;
+  --color-accent-rec: #FF2A3C;        /* deep red: record, danger */
+  --color-accent-rec-dim: #800F1A;
+  --color-accent-stop: #FF6B35;       /* warm orange: stop, cautionary */
+  --color-accent-cue: #FFD23F;        /* yellow: cue points, highlighter */
+  --color-accent-cue-dim: #806B1F;
+  --color-accent-macro: #B47AFF;      /* lavender: abstract parameters */
+  --color-accent-link: #4CC9F0;       /* cyan: network, connection */
+  --color-accent-link-dim: #1E6B82;
+  --color-critical: #FF1A5C;          /* pink-red: errors */
+
+  /* ---------- Type ---------- */
+  --font-display: "Space Grotesk", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-sans: "Space Grotesk", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+  --text-xs: 11px;
+  --text-sm: 13px;
+  --text-base: 15px;
+  --text-md: 18px;
+  --text-lg: 22px;
+  --text-xl: 28px;
+  --text-2xl: 36px;
+  --text-3xl: 48px;
+  --text-4xl: 64px;
+  --text-5xl: 88px;
+
+  /* ---------- Radii ---------- */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 20px;
+  --radius-full: 9999px;
+
+  /* ---------- Shadows (inner-glow, instrument feel) ---------- */
+  --shadow-inset-soft: inset 0 1px 0 rgba(255, 255, 255, 0.03),
+                       inset 0 -1px 0 rgba(0, 0, 0, 0.4);
+  --shadow-inset-pressed: inset 0 2px 4px rgba(0, 0, 0, 0.5),
+                          inset 0 -1px 0 rgba(255, 255, 255, 0.04);
+  --shadow-elevated: 0 1px 0 rgba(255, 255, 255, 0.04),
+                    0 4px 16px rgba(0, 0, 0, 0.4);
+
+  /* ---------- Animation ---------- */
+  --ease-instrument: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+/* ========================================================================
+   Base reset
+   ======================================================================== */
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  overscroll-behavior: none;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+body {
+  background: var(--color-bg);
+  color: var(--color-text-1);
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  line-height: 1.4;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  font-feature-settings: "ss01" on, "ss02" on;
+}
+
+button {
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+input, textarea {
+  font-family: inherit;
+  font-size: inherit;
+  color: var(--color-text-1);
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+::selection {
+  background: var(--color-accent-link);
+  color: var(--color-text-inverse);
+}
+
+/* ========================================================================
+   Custom utilities (reusable instrument patterns)
+   ======================================================================== */
+
+@utility panel {
+  background: var(--color-surface-1);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-inset-soft);
+}
+
+@utility panel-raised {
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-elevated);
+}
+
+@utility tactile {
+  background: var(--color-surface-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-inset-soft);
+  transition: transform 80ms var(--ease-instrument),
+              background 80ms var(--ease-instrument);
+}
+
+@utility tactile-active {
+  background: var(--color-surface-4);
+  transform: translateY(1px);
+  box-shadow: var(--shadow-inset-pressed);
+}
+
+@utility label-cap {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-text-3);
+}
+
+@utility value-mono {
+  font-family: var(--font-mono);
+  font-feature-settings: "tnum" on, "zero" on;
+  font-variant-numeric: tabular-nums;
+}
+
+/* iOS safe-area (notch / home bar). Apply to bottom bars. */
+@utility pb-safe {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+@utility pt-safe {
+  padding-top: env(safe-area-inset-top);
+}
+
+/* Momentum scrolling on iOS for overflow areas */
+@utility scroll-touch {
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Beat-synced pulse (driven by a CSS variable that JS updates) */
+@keyframes beat-pulse {
+  0%, 100% { opacity: 0.35; }
+  10% { opacity: 1; }
+}
+
+.beat-dot {
+  animation: beat-pulse 1s var(--ease-instrument) infinite;
+  animation-duration: var(--beat-duration, 0.5s);
+}
+
+/* Custom scrollbar — slim, fades out */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: var(--color-border-strong);
+  border-radius: var(--radius-full);
+}
+::-webkit-scrollbar-thumb:hover { background: var(--color-text-3); }
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

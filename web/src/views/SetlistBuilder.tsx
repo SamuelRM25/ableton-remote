@@ -36,12 +36,18 @@ export function SetlistBuilder({
   const unknown = durations.filter((d) => d === null).length;
   const target = (activeSetlist?.targetMin ?? 0) * 60;
 
-  const inSetlist = (s: SongItem) => entries.some((e) => e.name === s.name && Math.abs(e.pos - s.pos) < 0.01);
+  const sameSong = (e: { name: string; pos: number }, s: SongItem) => e.name === s.name && Math.abs(e.pos - s.pos) < 0.01;
+  /** 1-based positions of a song inside the setlist (empty = not in it). */
+  const positionsOf = (s: SongItem) => entries.flatMap((e, i) => (sameSong(e, s) ? [i + 1] : []));
+  const [onlyMissing, setOnlyMissing] = useState(false);
+  const [flashKey, setFlashKey] = useState<string | null>(null);
 
   function ensureList() {
     return activeSetlist ?? st.createSetlist(`Setlist ${config.setlists.length + 1}`);
   }
   function add(s: SongItem) {
+    setFlashKey(s.key);
+    window.setTimeout(() => setFlashKey((k) => (k === s.key ? null : k)), 900);
     const l = ensureList();
     const next = [...(l.id === activeSetlist?.id ? entries : l.entries), { name: s.name, pos: s.pos }];
     if (l.id === activeSetlist?.id) st.updateSetlist(l.id, (x) => ({ ...x, entries: next }));
@@ -55,6 +61,13 @@ export function SetlistBuilder({
     [next[i], next[j]] = [next[j], next[i]];
     st.updateSetlist(activeSetlist.id, (x) => ({ ...x, entries: next }));
   }
+  /** Take a song out of the setlist (its last appearance). */
+  function removeSong(s: SongItem) {
+    if (!activeSetlist) return;
+    const last = entries.map((e, i) => (sameSong(e, s) ? i : -1)).filter((i) => i >= 0).pop();
+    if (last !== undefined) remove(last);
+  }
+
   function remove(i: number) {
     if (!activeSetlist) return;
     st.updateSetlist(activeSetlist.id, (x) => ({ ...x, entries: entries.filter((_, k) => k !== i) }));
@@ -247,11 +260,23 @@ export function SetlistBuilder({
           <section className="panel flex flex-col" style={{ padding: 14 }}>
             <header className="flex items-center gap-2" style={{ marginBottom: 12 }}>
               <div className="flex-1">
-                <div className="label-cap" style={{ fontSize: 10 }}>Canciones en «{config.songTrack}»</div>
+                <div className="label-cap" style={{ fontSize: 10 }}>
+                  Canciones en «{config.songTrack}»
+                  {allSongs && ` · ${allSongs.filter((x) => positionsOf(x).length > 0).length} de ${allSongs.length} en el setlist`}
+                </div>
                 <div style={{ fontSize: 13, color: "var(--color-text-2)" }}>
                   Duración = largo del clip MIDI ÷ BPM. Pon el BPM de cada canción si no es el actual ({Math.round(st.clock.tempo * 100) / 100}).
                 </div>
               </div>
+              <LedKey
+                size="sm"
+                variant="dot"
+                color="cue"
+                active={onlyMissing}
+                label="Faltan"
+                title="Mostrar solo las que todavía no están en el setlist"
+                onClick={() => setOnlyMissing((v) => !v)}
+              />
               <LedKey
                 size="sm"
                 label="Todas"
@@ -276,15 +301,45 @@ export function SetlistBuilder({
               <p style={{ margin: 0, fontSize: 14, color: "var(--color-text-2)" }}>No hay clips en esa pista.</p>
             ) : (
               <ul className="flex flex-col gap-1.5" style={{ margin: 0, padding: 0, listStyle: "none" }}>
-                {allSongs.map((s) => {
+                {allSongs.filter((s) => !onlyMissing || positionsOf(s).length === 0).map((s) => {
                   const d = st.durationSec(s);
-                  const added = inSetlist(s);
+                  const pos = positionsOf(s);
+                  const added = pos.length > 0;
+                  const flash = flashKey === s.key;
                   return (
                     <li
                       key={s.key}
                       className="flex items-center gap-2"
-                      style={{ padding: "8px 10px", borderRadius: 8, background: added ? "rgba(255,178,62,0.07)" : "rgba(0,0,0,0.18)" }}
+                      style={{
+                        padding: "8px 10px",
+                        borderRadius: 8,
+                        background: flash
+                          ? "rgba(57,242,138,0.22)"
+                          : added
+                            ? "linear-gradient(90deg, rgba(255,178,62,0.22), rgba(255,178,62,0.06))"
+                            : "rgba(0,0,0,0.18)",
+                        boxShadow: added ? "inset 0 0 0 1.5px rgba(255,178,62,0.75)" : "inset 0 0 0 1px rgba(255,255,255,0.04)",
+                        transition: "background 300ms var(--ease-instrument)",
+                      }}
                     >
+                      {/* Setlist position badge: you see at a glance what's in and where */}
+                      <span
+                        className="value-mono shrink-0 flex items-center justify-center"
+                        title={added ? `Posición ${pos.join(", ")} del setlist` : "No está en el setlist"}
+                        style={{
+                          minWidth: 30,
+                          height: 26,
+                          padding: "0 6px",
+                          borderRadius: 6,
+                          fontSize: 12,
+                          fontWeight: 700,
+                          background: added ? "var(--color-accent-cue)" : "#0d0e10",
+                          color: added ? "var(--color-text-inverse)" : "var(--color-text-3)",
+                          boxShadow: added ? "0 0 10px rgba(255,178,62,0.5)" : "var(--shadow-well)",
+                        }}
+                      >
+                        {added ? pos.map((n) => `#${n}`).join(" ") : "—"}
+                      </span>
                       <span style={{ width: 4, height: 26, borderRadius: 2, background: colorToHex(s.color) ?? "#666" }} />
                       <span className="flex-1 min-w-0">
                         <span className="truncate block" style={{ fontSize: 15, fontWeight: 600 }}>{s.name || "Sin nombre"}</span>
@@ -311,7 +366,14 @@ export function SetlistBuilder({
                       <span className="value-mono shrink-0" style={{ width: 52, textAlign: "right", fontSize: 13 }}>
                         {d !== null ? formatDuration(d) : "—"}
                       </span>
-                      <LedKey size="sm" color="play" label="+" onClick={() => add(s)} title="Agregar al setlist" width={36} />
+                      {added ? (
+                        <>
+                          <LedKey size="sm" color="critical" label="−" onClick={() => removeSong(s)} title="Quitar del setlist" width={36} />
+                          <LedKey size="sm" label="+" onClick={() => add(s)} title="Agregarla otra vez (si se toca dos veces en el set)" width={36} />
+                        </>
+                      ) : (
+                        <LedKey size="sm" color="play" label="+" onClick={() => add(s)} title="Agregar al setlist" width={36} />
+                      )}
                     </li>
                   );
                 })}

@@ -5,8 +5,10 @@ import { useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode }
  * lines first) when it doesn't fit. Long names like a medley title stay
  * inside their panel instead of spilling over the rest of the screen.
  *
- * The box is the parent's size: give FitText a container with a definite
- * width and height (flex-1 + min-h-0 works).
+ * FitText fills its parent ABSOLUTELY (inset: 0), so the parent must be
+ * `position: relative` and get its size from layout (flex-1 + min-h-0).
+ * Percentage heights inside flex items don't resolve in Safari — that is
+ * what let long titles spill out on the iPad.
  */
 export function FitText({
   children,
@@ -65,7 +67,7 @@ export function FitText({
   }, [children, max, min]);
 
   return (
-    <div ref={boxRef} className={className} style={{ width: "100%", height: "100%", minHeight: 0, overflow: "hidden", ...style }}>
+    <div ref={boxRef} className={className} style={{ position: "absolute", inset: 0, overflow: "hidden", ...style }}>
       <div
         ref={textRef}
         style={{

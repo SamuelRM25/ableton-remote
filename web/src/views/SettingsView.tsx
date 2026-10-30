@@ -2,6 +2,7 @@ import { useState } from "react";
 import { abletonStore } from "../lib/ableton-store";
 import { useSettings, useConnectionStatus, useLatency } from "../lib/hooks";
 import { DEFAULT_SETTINGS } from "../lib/settings";
+import { BackupPanel } from "../components/BackupPanel";
 
 export function SettingsView() {
   const settings = useSettings();
@@ -87,6 +88,10 @@ export function SettingsView() {
               Reconnect
             </button>
           </div>
+        </Section>
+
+        <Section title="Respaldo de datos">
+          <BackupPanel />
         </Section>
 
         <Section title="Local data">

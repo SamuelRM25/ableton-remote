@@ -54,6 +54,11 @@ export interface SongConfig {
   picks: Record<string, PartRef[]>;
   /** BPM per song, used to turn its length in beats into minutes. */
   bpm: Record<string, number>;
+  /**
+   * Real length of each song as Live computes it (tempo automation and
+   * changes included), keyed by measureKey(song). Filled by "Medir con Live".
+   */
+  measured: Record<string, { sec: number; tempo: number }>;
   setlists: Setlist[];
   activeSetlist: string | null;
 }
@@ -73,6 +78,7 @@ function loadConfig(): SongConfig {
     chain: false,
     picks: {},
     bpm: {},
+    measured: {},
     setlists: [],
     activeSetlist: null,
   };
@@ -332,6 +338,7 @@ function useLiveConfigSync(client: Ableton | null) {
           ...doc,
           picks: doc.picks ?? current.picks,
           bpm: doc.bpm ?? current.bpm,
+          measured: (doc as any).measured ?? current.measured,
           setlists: doc.setlists ?? current.setlists,
         };
         if (JSON.stringify(merged) !== JSON.stringify(current)) {
@@ -400,6 +407,11 @@ function useCuePoints(client: Ableton | null, enabled: boolean): SongItem[] | nu
   return cues;
 }
 
+/** Identity of a song clip + its range, so moving/resizing it re-measures. */
+export function measureKey(s: SongItem, end: number | null): string {
+  return `${s.name}@${s.pos.toFixed(3)}-${end === null ? "?" : end.toFixed(3)}`;
+}
+
 /** m:ss for a duration in seconds. */
 export function formatDuration(sec: number): string {
   if (!isFinite(sec) || sec < 0) return "—";
@@ -457,7 +469,8 @@ export function useSongStructure(client: Ableton | null) {
   /** Songs in performance order: the active setlist, or the set's own order. */
   const songs: SongItem[] | null = allSongs ? (activeSetlist && setSongs.length > 0 ? setSongs : allSongs) : null;
 
-  const bpmOf = (s: SongItem) => config.bpm[s.name] ?? clock.tempo;
+  /** Tempo for a song: typed by hand, else the one Live had at its start. */
+  const bpmOf = (s: SongItem) => config.bpm[s.name] ?? config.measured?.[measureKey(s, songEndRaw(s))]?.tempo ?? clock.tempo;
   /** Song length in beats: its clip in the Arrangement, else up to the next song. */
   const songBeats = (s: SongItem): number | null => {
     if (s.source !== "arrangement") return null;
@@ -466,9 +479,68 @@ export function useSongStructure(client: Ableton | null) {
     const next = sorted[sorted.indexOf(s) + 1];
     return next ? next.pos - s.pos : null;
   };
-  const durationSec = (s: SongItem): number | null => {
+  function songEndRaw(s: SongItem): number | null {
     const b = songBeats(s);
-    return b === null ? null : (b * 60) / bpmOf(s);
+    return b === null ? null : s.pos + b;
+  }
+  /**
+   * How long a song lasts, and where that number comes from:
+   *   - "manual":   you typed a BPM for it;
+   *   - "live":     measured by Live itself (tempo automation included);
+   *   - "estimate": its length in beats at the current tempo (rough).
+   */
+  const durationInfo = (s: SongItem): { sec: number; source: "manual" | "live" | "estimate" } | null => {
+    const b = songBeats(s);
+    if (b === null) return null;
+    const manual = config.bpm[s.name];
+    if (manual) return { sec: (b * 60) / manual, source: "manual" };
+    const m = config.measured?.[measureKey(s, songEndRaw(s))];
+    if (m && m.sec > 0) return { sec: m.sec, source: "live" };
+    return { sec: (b * 60) / clock.tempo, source: "estimate" };
+  };
+  const durationSec = (s: SongItem): number | null => durationInfo(s)?.sec ?? null;
+
+  /**
+   * Ask Live how long every song really lasts. Live converts positions to
+   * time with the whole tempo map, so tempo automation inside a song counts.
+   * Only while stopped (the MIDI script moves the playhead and puts it back).
+   */
+  const measureAll = async (): Promise<{ ok: boolean; message: string; count: number }> => {
+    if (!client || !allSongs) return { ok: false, message: "Live no está conectado", count: 0 };
+    const targets = allSongs
+      .filter((x) => x.source === "arrangement")
+      .map((x) => ({ s: x, end: songEndRaw(x) }))
+      .filter((x): x is { s: SongItem; end: number } => x.end !== null && isFinite(x.end));
+    if (targets.length === 0) return { ok: false, message: "No hay canciones en el Arreglo para medir", count: 0 };
+    const points = Array.from(new Set(targets.flatMap((x) => [x.s.pos, x.end]))).sort((a, b) => a - b);
+    let res: any;
+    try {
+      res = await client.sendCommand({ ns: "song", name: "measure_seconds", args: { beats: points }, timeout: 20000 } as any);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (/reproduciendo/i.test(msg)) return { ok: false, message: "Detén Live para medir", count: 0 };
+      if (/measure_seconds|doesn't exist|callable/i.test(msg))
+        return { ok: false, message: "Reinicia Live para activar la medición (script actualizado)", count: 0 };
+      return { ok: false, message: "Live no pudo medir", count: 0 };
+    }
+    const secs: number[] = res?.seconds ?? [];
+    const tempos: number[] = res?.tempos ?? [];
+    if (secs.length !== points.length) return { ok: false, message: "Live devolvió una medición incompleta", count: 0 };
+    // Sanity: time must grow with position, or Live didn't really move.
+    const increasing = secs.every((v, i) => i === 0 || v >= secs[i - 1] - 0.001);
+    if (!increasing || secs[secs.length - 1] - secs[0] <= 0) {
+      return { ok: false, message: "Live no movió la posición; no se pudo medir", count: 0 };
+    }
+    const at = (b: number) => points.indexOf(b);
+    const measured = { ...(config.measured ?? {}) };
+    for (const x of targets) {
+      const i0 = at(x.s.pos);
+      const i1 = at(x.end);
+      const sec = secs[i1] - secs[i0];
+      if (sec > 0) measured[measureKey(x.s, x.end)] = { sec, tempo: Math.round((tempos[i0] ?? clock.tempo) * 100) / 100 };
+    }
+    setConfig({ ...songStore.getState().config, measured });
+    return { ok: true, message: `${targets.length} canciones medidas con el tempo real de Live`, count: targets.length };
   };
 
   // Session: Live tells us what plays. Arrangement: the playhead does.
@@ -621,6 +693,8 @@ export function useSongStructure(client: Ableton | null) {
     createSetlist,
     deleteSetlist,
     durationSec,
+    durationInfo,
+    measureAll,
     songBeats,
     bpmOf,
   };

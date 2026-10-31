@@ -5,7 +5,7 @@
  * beats) at that song's BPM. The BPM defaults to Live's current tempo and
  * can be set per song, since Live's API doesn't expose tempo automation.
  */
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Ableton } from "ableton-js";
 import { colorToHex } from "../lib/color";
 import { toast } from "../lib/toast";
@@ -22,6 +22,28 @@ export function SetlistBuilder({
   onConfigure: () => void;
 }) {
   const st = useSongStructure(client);
+  const [measuring, setMeasuring] = useState(false);
+  const [measureMsg, setMeasureMsg] = useState<string | null>(null);
+  const measureRef = useRef(st.measureAll);
+  measureRef.current = st.measureAll;
+
+  async function measure() {
+    setMeasuring(true);
+    const r = await measureRef.current();
+    setMeasuring(false);
+    setMeasureMsg(r.message);
+  }
+
+  // Measure on its own when the songs change and Live is stopped, so
+  // durations are real (tempo automation included) without typing BPMs.
+  const songsSig = (st.allSongs ?? []).map((x) => `${x.key}:${x.end ?? ""}`).join("|");
+  const missing = (st.allSongs ?? []).some((x) => x.source === "arrangement" && st.durationInfo(x)?.source === "estimate");
+  useEffect(() => {
+    if (!client || !songsSig || !missing || st.clock.isPlaying) return;
+    const t = window.setTimeout(() => void measure(), 600);
+    return () => window.clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [client, songsSig, missing, st.clock.isPlaying]);
   const { config, setConfig, allSongs, activeSetlist } = st;
   const [renaming, setRenaming] = useState(false);
   const [nameDraft, setNameDraft] = useState("");
@@ -264,16 +286,29 @@ export function SetlistBuilder({
 
           {/* ---------------- Songs in Live ---------------- */}
           <section className="panel flex flex-col" style={{ padding: 14 }}>
-            <header className="flex items-center gap-2" style={{ marginBottom: 12 }}>
-              <div className="flex-1">
+            <header className="flex flex-wrap items-center gap-2" style={{ marginBottom: 12 }}>
+              <div style={{ flex: "1 1 100%" }}>
                 <div className="label-cap" style={{ fontSize: 10 }}>
                   Canciones en «{config.songTrack}»
                   {allSongs && ` · ${allSongs.filter((x) => positionsOf(x).length > 0).length} de ${allSongs.length} en el setlist`}
                 </div>
-                <div style={{ fontSize: 13, color: "var(--color-text-2)" }}>
-                  Duración = largo del clip MIDI ÷ BPM. Pon el BPM de cada canción si no es el actual ({Math.round(st.clock.tempo * 100) / 100}).
+                <div style={{ fontSize: 13, color: "var(--color-text-2)", lineHeight: 1.45 }}>
+                  Live mide cada canción con su tempo real, cambios de tempo incluidos (con el transporte detenido).
+                  {measureMsg && (
+                    <span style={{ display: "block", marginTop: 3, color: /medidas/.test(measureMsg) ? "var(--color-accent-play)" : "var(--color-accent-cue)" }}>
+                      {measureMsg}
+                    </span>
+                  )}
                 </div>
               </div>
+              <LedKey
+                size="sm"
+                color="play"
+                label={measuring ? "Midiendo…" : "Medir con Live"}
+                disabled={measuring || !client}
+                title={st.clock.isPlaying ? "Detén Live para medir" : "Calcular la duración real de cada canción"}
+                onClick={() => void measure()}
+              />
               <LedKey
                 size="sm"
                 variant="dot"
@@ -407,15 +442,34 @@ export function SetlistBuilder({
                         max={999}
                         step="0.01"
                         value={config.bpm[s.name] ?? ""}
-                        placeholder={String(Math.round(st.clock.tempo))}
+                        placeholder={String(Math.round(st.bpmOf(s)))}
+                        title="Solo si quieres forzar un tempo; si lo dejas vacío se usa la medición de Live"
                         onChange={(e) => setBpm(s.name, e.target.value === "" ? null : Number(e.target.value))}
                         aria-label={`BPM de ${s.name}`}
                         className="well value-mono"
                         style={{ width: 64, padding: "5px 6px", fontSize: 13, textAlign: "center", border: "1px solid rgba(0,0,0,0.6)" }}
                       />
                       <span className="label-cap" style={{ fontSize: 9 }}>BPM</span>
-                      <span className="value-mono shrink-0" style={{ width: 52, textAlign: "right", fontSize: 13 }}>
-                        {d !== null ? formatDuration(d) : "—"}
+                      <span className="value-mono shrink-0 flex flex-col items-end" style={{ width: 58, fontSize: 13, lineHeight: 1.1 }}>
+                        <span>{d !== null ? `${st.durationInfo(s)?.source === "estimate" ? "≈" : ""}${formatDuration(d)}` : "—"}</span>
+                        {d !== null && (
+                          <span
+                            style={{
+                              fontSize: 9,
+                              fontFamily: "var(--font-display)",
+                              letterSpacing: "0.08em",
+                              textTransform: "uppercase",
+                              color:
+                                st.durationInfo(s)?.source === "live"
+                                  ? "var(--color-accent-play)"
+                                  : st.durationInfo(s)?.source === "manual"
+                                    ? "var(--color-accent-cue)"
+                                    : "var(--color-text-3)",
+                            }}
+                          >
+                            {st.durationInfo(s)?.source === "live" ? "Live" : st.durationInfo(s)?.source === "manual" ? "Manual" : "Aprox."}
+                          </span>
+                        )}
                       </span>
                       {added ? (
                         <>

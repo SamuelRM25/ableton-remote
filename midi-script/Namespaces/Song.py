@@ -74,6 +74,28 @@ class Song(Interface):
             "frames": time.frames,
         }
 
+    def measure_seconds(self, ns, beats):
+        """Wall-clock time (seconds from the song start) of each position in
+        `beats`, as Live computes it — tempo automation and tempo changes
+        included. Live has no direct beats->time call, so the transport is
+        moved to each position, its time read, and then put back. Only while
+        stopped, so nothing audible happens."""
+        if ns.is_playing:
+            raise Exception("Live está reproduciendo: detén el transporte para medir")
+        original = ns.current_song_time
+        fmt = Live.Song.TimeFormat.ms_time
+        seconds = []
+        tempos = []
+        try:
+            for b in beats:
+                ns.current_song_time = max(0.0, float(b))
+                t = ns.get_current_smpte_song_time(fmt)
+                seconds.append(t.hours * 3600 + t.minutes * 60 + t.seconds + t.frames / 1000.0)
+                tempos.append(ns.tempo)
+        finally:
+            ns.current_song_time = original
+        return {"seconds": seconds, "tempos": tempos}
+
     def get_beat_position(self, ns):
         """Playhead in Live's OWN bar grid (honours time-signature changes),
         plus the raw beat time, in one round trip. The app derives where the

@@ -16,16 +16,35 @@ export async function getTempo(client: Ableton): Promise<number> {
 }
 
 /**
- * Set when we moved the playhead while Live was stopped. Live's Play
- * (start_playing) starts from the START MARKER, not from the playhead, so
- * the transport's Play uses continue_playing while this is set — otherwise
- * selecting a marker and pressing Play sent you back to 1.1.1.
+ * Where Play should start after you picked a song/part/marker while Live
+ * was STOPPED.
+ *
+ * Live ignores jump_by while stopped for the purpose of resuming: both its
+ * Play (start_playing → start marker) and continue_playing (→ where it last
+ * stopped) would take you back to e.g. bar 225 instead of the song you just
+ * chose at 650. So the app remembers the target itself and, on Play, starts
+ * from it and corrects the playhead if Live started somewhere else.
  */
 let armedStartBeats: number | null = null;
+const armListeners = new Set<(v: number | null) => void>();
+
+function setArmed(v: number | null) {
+  armedStartBeats = v;
+  armListeners.forEach((l) => l(v));
+}
+
+export function peekArmedStart(): number | null {
+  return armedStartBeats;
+}
+
+export function onArmedStartChange(fn: (v: number | null) => void): () => void {
+  armListeners.add(fn);
+  return () => armListeners.delete(fn);
+}
 
 export function takeArmedStart(): number | null {
   const v = armedStartBeats;
-  armedStartBeats = null;
+  setArmed(null);
   return v;
 }
 
@@ -36,25 +55,43 @@ export async function jumpToTime(client: Ableton, beats: number): Promise<void> 
     client.song.get("current_song_time"),
     client.song.get("is_playing"),
   ]);
-  const delta = target - now;
-  if (Math.abs(delta) > 0.001) {
-    await client.song.jumpBy(delta);
+  if (playing) {
+    setArmed(null);
+    const delta = target - now;
+    if (Math.abs(delta) > 0.001) await client.song.jumpBy(delta);
+    return;
   }
-  if (!playing) {
-    armedStartBeats = target;
-    // Also move Live's start marker, so the space bar / Live's own Play
-    // button start from here too.
-    await client.song.set("start_time" as any, target as any).catch(() => {});
-  } else {
-    armedStartBeats = null;
+  // Stopped: remember it for Play, and also try to move Live's own
+  // position + start marker (so Live's space bar agrees when it can).
+  setArmed(target);
+  await client.song.set("current_song_time" as any, target as any).catch(() => {});
+  await client.song.set("start_time" as any, target as any).catch(() => {});
+}
+
+/**
+ * Start playback exactly at `beats`. Works whatever Live decides to resume
+ * from: it starts, checks where the playhead really is, and jumps the
+ * difference (jump_by is reliable while playing).
+ */
+export async function startFrom(client: Ableton, beats: number): Promise<void> {
+  const target = Math.max(0, beats);
+  setArmed(null);
+  await client.song.set("current_song_time" as any, target as any).catch(() => {});
+  const tempo = await getTempo(client);
+  const startedAt = performance.now();
+  await client.song.continuePlaying();
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const pos = Number(await client.song.get("current_song_time"));
+    const expected = target + ((performance.now() - startedAt) / 60000) * tempo;
+    const off = expected - pos;
+    if (Math.abs(off) < 0.5) return;
+    await client.song.jumpBy(off);
   }
 }
 
 /** Jump to a position and start playing from there. */
 export async function playFromTime(client: Ableton, beats: number): Promise<void> {
-  await jumpToTime(client, beats);
-  armedStartBeats = null;
-  await client.song.continuePlaying();
+  await startFrom(client, beats);
 }
 
 /**

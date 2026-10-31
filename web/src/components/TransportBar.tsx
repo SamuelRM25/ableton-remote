@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAbleton, useLiveProp, useSongToggle } from "../lib/hooks";
 import { IconClick, IconLoop, IconPlay, IconRecord, IconStop } from "./icons";
 import { TempoDial } from "./TempoDial";
 import { LedKey, glow } from "./hw";
 import { toast } from "../lib/toast";
-import { takeArmedStart } from "../lib/cue-jump";
+import { onArmedStartChange, peekArmedStart, startFrom, takeArmedStart } from "../lib/cue-jump";
+import { beatsToBarLabel } from "../lib/clock";
 
 async function safeRun(fn: () => Promise<unknown>, label: string) {
   try {
@@ -32,6 +33,9 @@ export function TransportBar() {
   const [ovrOn, toggleOvr] = useSongToggle(client, "arrangement_overdub", onErr("cambiar overdub"));
 
   const disabled = !client;
+  // Where Play will start after picking a song/part/marker while stopped.
+  const [armed, setArmed] = useState<number | null>(peekArmedStart());
+  useEffect(() => onArmedStartChange(setArmed), []);
 
   return (
     <footer
@@ -91,7 +95,7 @@ export function TransportBar() {
       </BigKey>
 
       <BigKey
-        label={isPlaying ? "Playing" : "Play"}
+        label={isPlaying ? "Playing" : armed !== null ? `Desde ${beatsToBarLabel(armed)}` : "Play"}
         color="var(--color-accent-play)"
         active={isPlaying}
         disabled={disabled}
@@ -102,11 +106,12 @@ export function TransportBar() {
             () =>
               isPlaying
                 ? client.song.stopPlaying()
-                : // After choosing a marker while stopped, play from IT
-                  // (Live's start_playing would use the start marker).
-                  takeArmedStart() !== null
-                  ? client.song.continuePlaying()
-                  : client.song.startPlaying(),
+                : // After choosing a song / part / marker while stopped,
+                  // play from IT — not from where Live last stopped.
+                  (() => {
+                    const armed = takeArmedStart();
+                    return armed !== null ? startFrom(client, armed) : client.song.startPlaying();
+                  })(),
             isPlaying ? "pausar" : "reproducir",
           )
         }

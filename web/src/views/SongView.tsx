@@ -9,7 +9,7 @@ import { useLiveRawList } from "../lib/list-hooks";
 import { colorToHex } from "../lib/color";
 import { toast } from "../lib/toast";
 import { beatsToBarLabel } from "../lib/clock";
-import { jumpOnNextDownbeat, loopRange } from "../lib/cue-jump";
+import { jumpOnNextDownbeat, loopRange, startFrom } from "../lib/cue-jump";
 import { formatDuration, useSongStructure, type SongItem, type SongConfig } from "../lib/song-structure";
 import { useLiveProp } from "../lib/hooks";
 import { EmptyPanel, Led, LedKey, ViewStrip } from "../components/hw";
@@ -201,7 +201,13 @@ export function SongView({ client, switcher }: { client: Ableton | null; switche
                 variant="ring"
                 active={st.playingSongKey === song.key}
                 label={`▶ ${song.name}`}
-                onClick={() => void launch(song)}
+                title={st.clock.isPlaying ? "Ir al inicio de la canción en el siguiente compás" : "Reproducir desde el inicio de la canción"}
+                onClick={() => {
+                  // Stopped: this is a real Play from the song's first beat.
+                  if (client && song.source === "arrangement" && !st.clock.isPlaying) {
+                    void startFrom(client, song.start ?? song.pos).catch(() => toast("No se pudo reproducir"));
+                  } else void launch(song);
+                }}
                 style={{ textTransform: "none", fontSize: 15 }}
               />
               <LedKey size="md" width={48} label="▶▶" title="Siguiente canción" disabled={!st.nextSong} onClick={() => goToSong(st.nextSong)} />

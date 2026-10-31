@@ -1,4 +1,5 @@
 import type { Ableton } from "ableton-js";
+import { getBarInfo } from "./bar-grid";
 
 /**
  * Units: Live's arrangement API is BEATS-based everywhere —
@@ -110,12 +111,10 @@ export function jumpOnNextDownbeat(
   void (async () => {
     try {
       const asked = performance.now();
-      const [playing, posRaw, tempoRaw, num, den] = await Promise.all([
+      const [playing, tempoRaw, grid] = await Promise.all([
         client.song.get("is_playing"),
-        client.song.get("current_song_time"),
         client.song.get("tempo"),
-        client.song.get("signature_numerator"),
-        client.song.get("signature_denominator"),
+        getBarInfo(client),
       ]);
       if (cancelled) return;
       if (!playing) {
@@ -124,11 +123,16 @@ export function jumpOnNextDownbeat(
         return;
       }
       const quarterMs = 60000 / (tempoRaw > 0 ? tempoRaw : 120);
-      const barQ = ((num > 0 ? num : 4) * 4) / (den > 0 ? den : 4);
-      const pos = Number(posRaw) + (performance.now() - asked) / 2 / quarterMs;
-      let remainingQ = barQ - (((pos % barQ) + barQ) % barQ);
-      if (remainingQ * quarterMs < 120) remainingQ += barQ;
-      const downbeat = pos + remainingQ;
+      // Next "1" in Live's REAL grid (a 5/4 bar earlier in the song no
+      // longer shifts it onto the 2).
+      const pos = grid.pos + (performance.now() - asked) / 2 / quarterMs;
+      let downbeat = grid.barStart + grid.barQ;
+      while (downbeat - pos < 0) downbeat += grid.barQ;
+      let remainingQ = downbeat - pos;
+      if (remainingQ * quarterMs < 120) {
+        downbeat += grid.barQ;
+        remainingQ += grid.barQ;
+      }
       timer = window.setTimeout(() => {
         if (cancelled) return;
         client.song

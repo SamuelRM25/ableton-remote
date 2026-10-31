@@ -5,6 +5,7 @@ import { useLiveRawList } from "../lib/list-hooks";
 import { toast } from "../lib/toast";
 import { jumpToTime, playFromTime, loopRange } from "../lib/cue-jump";
 import { beatsToBarLabel } from "../lib/clock";
+import { getBarInfo } from "../lib/bar-grid";
 import {
   IconBookmark,
   IconCheck,
@@ -448,13 +449,13 @@ export function SetlistView({ switcher }: { switcher?: React.ReactNode } = {}) {
     lastFollowedRef.current = item.id;
     try {
       const asked = performance.now();
-      const [tempoRaw, sigRaw, sigDenRaw, prevClick, playing, posRaw] = await Promise.all([
+      const [tempoRaw, sigRaw, sigDenRaw, prevClick, playing, grid] = await Promise.all([
         client.song.get("tempo"),
         client.song.get("signature_numerator"),
         client.song.get("signature_denominator").catch(() => 4),
         client.song.get("metronome"),
         client.song.get("is_playing"),
-        client.song.get("current_song_time"),
+        getBarInfo(client),
       ]);
       const answered = performance.now();
       const tempo = tempoRaw > 0 ? tempoRaw : 120;
@@ -482,11 +483,17 @@ export function SetlistView({ switcher }: { switcher?: React.ReactNode } = {}) {
 
       if (playing) {
         // Where the playhead is right now (the reply took ~half the round trip).
-        const pos = Number(posRaw) + ((answered - asked) / 2 + (performance.now() - answered)) / quarterMs;
-        let remainingQ = barQ - (((pos % barQ) + barQ) % barQ);
+        const pos = grid.pos + ((answered - asked) / 2 + (performance.now() - answered)) / quarterMs;
+        // Bar lines come from Live's own grid (time-signature changes
+        // included), not from "every bar is N beats since bar 1".
+        let nextDownbeat = grid.barStart + grid.barQ;
+        while (nextDownbeat - pos < 0) nextDownbeat += grid.barQ;
+        let remainingQ = nextDownbeat - pos;
         // Too close to the downbeat to react: enter on the following one.
-        if (remainingQ * quarterMs < 250) remainingQ += barQ;
-        const nextDownbeat = pos + remainingQ;
+        if (remainingQ * quarterMs < 250) {
+          nextDownbeat += grid.barQ;
+          remainingQ += grid.barQ;
+        }
         const t0 = performance.now();
         const untilDownbeatMs = remainingQ * quarterMs;
         const beatsLeft = Math.ceil(remainingQ / beatQ - 1e-6);

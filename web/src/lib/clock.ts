@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { Ableton } from "ableton-js";
 import { useLiveProp } from "./hooks";
+import { barBeatAt, barInfoFromLive, isBeatPositionSupported, markBeatPositionUnsupported } from "./bar-grid";
 
 export interface SongClock {
   /** Interpolated arrangement position in BEATS (Live's native unit). */
@@ -18,6 +19,10 @@ export interface SongClock {
   barsDisplay: string;
   /** "4/4" style signature string. */
   signatureDisplay: string;
+  /** Start of the current bar, in beats (Live's real grid). */
+  barStartBeats: number;
+  /** Length of the current bar, in beats. */
+  barBeats: number;
 }
 
 /**
@@ -41,7 +46,14 @@ export function useSongClock(client: Ableton | null): SongClock {
   const isPlaying =
     useLiveProp<boolean>(client, (c) => c.song, "is_playing") ?? false;
 
-  const baseRef = useRef({ t: 0, at: 0 });
+  // t = song time at the last poll; barStart/bar = Live's real bar grid
+  // there (null when the MIDI script can't tell us — then 4/4-from-zero).
+  const baseRef = useRef<{ t: number; at: number; barStart: number | null; bar: number }>({
+    t: 0,
+    at: 0,
+    barStart: null,
+    bar: 1,
+  });
   const liveRef = useRef({ tempo, sigNum, sigDen, isPlaying });
   liveRef.current = { tempo, sigNum, sigDen, isPlaying };
 
@@ -53,10 +65,21 @@ export function useSongClock(client: Ableton | null): SongClock {
     if (!client) return;
     let cancelled = false;
     const fetch = async () => {
+      if (isBeatPositionSupported() !== false) {
+        try {
+          const info = barInfoFromLive(await client.getProp("song", undefined, "beat_position"));
+          if (!cancelled && info) {
+            baseRef.current = { t: info.pos, at: performance.now(), barStart: info.barStart, bar: info.bar };
+            return;
+          }
+        } catch {
+          markBeatPositionUnsupported();
+        }
+      }
       try {
         const t = await client.song.get("current_song_time");
         if (!cancelled && typeof t === "number") {
-          baseRef.current = { t, at: performance.now() };
+          baseRef.current = { t, at: performance.now(), barStart: null, bar: 1 };
         }
       } catch {
         // ignore
@@ -78,7 +101,7 @@ export function useSongClock(client: Ableton | null): SongClock {
       const { tempo: tp, sigNum: sn, isPlaying: pl } = liveRef.current;
       const { t, at } = baseRef.current;
       const now = pl && at > 0 ? t + ((performance.now() - at) / 1000) * (tp / 60) : t;
-      const key = `${formatClock(now, tp, sn)}:${Math.floor(now * 8)}`;
+      const key = `${buildClock(now, tp, sn, liveRef.current.sigDen, pl, baseRef.current).barsDisplay}:${Math.floor(now * 8)}`;
       if (key !== lastDisplayRef.current) {
         lastDisplayRef.current = key;
         setTick((n) => n + 1);
@@ -92,16 +115,7 @@ export function useSongClock(client: Ableton | null): SongClock {
   const { tempo: tp, sigNum: sn, sigDen: sd, isPlaying: pl } = liveRef.current;
   const { t, at } = baseRef.current;
   const now = pl && at > 0 ? t + ((performance.now() - at) / 1000) * (tp / 60) : t;
-  return buildClock(now, tp, sn, sd, pl);
-}
-
-function formatClock(
-  beats: number,
-  tempo: number,
-  beatsPerBar: number,
-  beatUnit = 4,
-): string {
-  return buildClock(beats, tempo, beatsPerBar, beatUnit, true).barsDisplay;
+  return buildClock(now, tp, sn, sd, pl, baseRef.current);
 }
 
 function buildClock(
@@ -110,18 +124,27 @@ function buildClock(
   beatsPerBarRaw: number,
   beatUnitRaw: number,
   isPlaying: boolean,
+  grid?: { t: number; barStart: number | null; bar: number },
 ): SongClock {
   const safeTempo = tempo > 0 ? tempo : 120;
   const bpb = beatsPerBarRaw > 0 ? Math.floor(beatsPerBarRaw) : 4;
   const unit = beatUnitRaw > 0 ? Math.floor(beatUnitRaw) : 4;
-  // Live's beat = quarter note. In x/8 the bar holds numerator eighths,
-  // so convert quarter-note beats to signature beats first.
   const totalQuarter = Math.max(0, beatsRaw);
-  const totalBeats = (totalQuarter * unit) / 4;
-  const bar = Math.floor(totalBeats / bpb) + 1;
-  const beat = Math.floor(mod(totalBeats, bpb)) + 1;
+  // Live's beat = quarter note; one signature beat = 4/unit quarters.
+  const beatQ = 4 / unit;
+  const barQ = bpb * beatQ;
+  // Real grid from Live when we have it (honours signature changes), else
+  // one signature from bar 1.
+  const anchorStart = grid && grid.barStart !== null ? grid.barStart : 0;
+  const anchorBar = grid && grid.barStart !== null ? grid.bar : 1;
+  const inside = totalQuarter - anchorStart;
+  const k = Math.floor(inside / barQ + 1e-9);
+  const bar = anchorBar + k;
+  const barStart = anchorStart + k * barQ;
+  const inBar = totalQuarter - barStart;
+  const beat = Math.floor(inBar / beatQ + 1e-9) + 1;
   const perBeat = Math.max(1, Math.round(16 / unit));
-  const sixteenth = Math.floor(mod(totalBeats * perBeat, perBeat)) + 1;
+  const sixteenth = Math.floor(mod(inBar / beatQ, 1) * perBeat + 1e-9) + 1;
   return {
     beats: totalQuarter,
     timeSec: (totalQuarter * 60) / safeTempo,
@@ -134,6 +157,8 @@ function buildClock(
     isPlaying,
     barsDisplay: `${bar}.${beat}.${sixteenth}`,
     signatureDisplay: `${bpb}/${unit}`,
+    barStartBeats: barStart,
+    barBeats: barQ,
   };
 }
 
@@ -141,11 +166,12 @@ function mod(n: number, m: number): number {
   return ((n % m) + m) % m;
 }
 
-/** Bar.beat label (e.g. "17.1") for a position in Live beats. */
+/**
+ * Bar.beat label (e.g. "17.1") for a position in Live beats, using the real
+ * bar lines Live has shown us (time-signature changes included).
+ */
 export function beatsToBarLabel(beats: number, beatsPerBar = 4, beatUnit = 4): string {
-  const sigBeats = (Math.max(0, beats) * beatUnit) / 4;
-  const bar = Math.floor(sigBeats / beatsPerBar) + 1;
-  const beat = Math.floor(mod(sigBeats, beatsPerBar)) + 1;
+  const { bar, beat } = barBeatAt(beats, beatsPerBar, beatUnit);
   return `${bar}.${beat}`;
 }
 

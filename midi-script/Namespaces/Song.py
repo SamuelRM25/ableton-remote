@@ -74,6 +74,22 @@ class Song(Interface):
             "frames": time.frames,
         }
 
+    def get_beat_position(self, ns):
+        """Playhead in Live's OWN bar grid (honours time-signature changes),
+        plus the raw beat time, in one round trip. The app derives where the
+        current bar started from this, so downbeat jumps, count-ins and the
+        bar display stay right after a 5/4 bar in a 4/4 song."""
+        bt = ns.get_current_beats_song_time()
+        return {
+            "song_time": ns.current_song_time,
+            "bars": bt.bars,
+            "beats": bt.beats,
+            "sub": bt.sub_division,
+            "ticks": bt.ticks,
+            "num": ns.signature_numerator,
+            "den": ns.signature_denominator,
+        }
+
     def set_appointed_device(self, ns, device_id):
         ns.appointed_device = Interface.get_obj(device_id)
 

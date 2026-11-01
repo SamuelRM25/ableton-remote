@@ -311,7 +311,7 @@ class Socket:
                 pass
             self._socket = None
 
-    # Called after every process() pass (set by AbletonJS) to flush
+    # Called after every process() pass (set by DAWRemote) to flush
     # throttled listener values such as meters.
     after_process = None
 

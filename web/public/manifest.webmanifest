@@ -1,7 +1,7 @@
 {
-  "name": "Ableton Remote",
-  "short_name": "Ableton",
-  "description": "Control total de Ableton Live 12 desde tu iPad por WiFi",
+  "name": "DAW Remote",
+  "short_name": "DAW Remote",
+  "description": "Control de tu DAW en vivo desde el iPad por WiFi · RS Software Solutions",
   "start_url": "/",
   "display": "fullscreen",
   "orientation": "landscape",

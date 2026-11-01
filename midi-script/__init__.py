@@ -10,6 +10,6 @@ def create_instance(c_instance):
 
         return Unsupported(c_instance)
 
-    from .AbletonJS import AbletonJS
+    from .DAWRemote import DAWRemote
 
-    return AbletonJS(c_instance)
+    return DAWRemote(c_instance)

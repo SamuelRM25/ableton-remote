@@ -1,4 +1,4 @@
-# Ableton Remote
+# DAW Remote
 
 Control total de Ableton Live 12 desde un iPad por WiFi local. Construido para uso en escenario: latencia sub-frame, multitouch, setlists, lyrics, macros, mixer y todo el Live Object Model expuesto.
 
@@ -70,10 +70,10 @@ node scripts/sync-remote-script.mjs
 
 # 4. Instalar el MIDI script en la User Library de Ableton
 mkdir -p ~/Music/Ableton/User\ Library/Remote\ Scripts/
-cp -R midi-script ~/Music/Ableton/User\ Library/Remote\ Scripts/AbletonJS
+cp -R midi-script ~/Music/Ableton/User\ Library/Remote\ Scripts/DAWRemote
 
 # 5. Abrir Ableton Live 12
-#    Preferences → Link / Tempo / MIDI → Control Surface → + → AbletonJS
+#    Preferences → Link / Tempo / MIDI → Control Surface → DAWRemote
 
 # 6. Fija la IP del Mac para que el bookmark del iPad no se rompa con DHCP.
 #    Sustituye los valores por los de tu red si difieren:
@@ -99,8 +99,8 @@ JS. Si el iPad no carga, el problema está del lado del iPad:
    Website Data, luego reintenta la URL.
 3. **URL exacta**: `http://192.168.1.94:39031/` (con `http://`, sin `https`,
    con el puerto `:39031` y la barra final).
-4. **Live abierto con AbletonJS activo**: Preferences → Link / Tempo / MIDI →
-   la fila de AbletonJS debe estar presente. Si editaste `midi-script/`,
+4. **Live abierto con DAWRemote activo**: Preferences → Link / Tempo / MIDI →
+   la fila de DAWRemote debe estar presente. Si editaste `midi-script/`,
    reinicia Live para que recargue el script (Live no hace hot-reload de
    Control Surfaces).
 5. **Diagnóstico desde el Mac**: `curl -sS -o /dev/null -w "%{http_code}\n"
@@ -222,3 +222,15 @@ Con ableton-js v5 cubrimos el LOM de Live 12 completo:
 ## Licencia
 
 MIT
+
+## Créditos y licencia
+
+**DAW Remote** v1.0.0 — © 2026 **RS Software Solutions**. Todos los derechos reservados.
+Desarrollado por **Oscar Samuel Ramírez Martínez** · Huehuetenango, Guatemala · (+502) 3902-9076.
+
+El script de control para Live es una versión modificada de
+[ableton-js](https://github.com/leolabs/ableton-js) © 2022 Leo Bernard, licencia MIT.
+Ver [NOTICE.md](NOTICE.md) para todos los componentes de terceros y [CHANGELOG.md](CHANGELOG.md) para el historial.
+
+Ableton y Ableton Live son marcas de Ableton AG. DAW Remote es un producto independiente,
+no afiliado ni respaldado por Ableton.

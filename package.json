@@ -1,8 +1,8 @@
 {
-  "name": "ableton-remote",
-  "version": "0.1.0",
+  "name": "daw-remote",
+  "version": "1.0.0",
   "private": true,
-  "description": "Control total de Ableton Live 12 desde un iPad por WiFi",
+  "description": "DAW Remote — control de tu DAW en vivo desde el iPad",
   "workspaces": [
     "web"
   ],
@@ -14,5 +14,6 @@
   },
   "engines": {
     "node": ">=20"
-  }
+  },
+  "author": "Oscar Samuel Ramírez Martínez — RS Software Solutions"
 }

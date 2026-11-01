@@ -2,6 +2,7 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { abletonWsBridge } from "./vite-plugins/ableton-ws-bridge";
+import pkg from "./package.json" with { type: "json" };
 
 // In dev: Vite serves the SPA on :5173. The ableton-js client builds its
 // WebSocket URL as ws://host:port with no path. The ableton-ws-bridge plugin
@@ -13,6 +14,10 @@ import { abletonWsBridge } from "./vite-plugins/ableton-ws-bridge";
 // the WebSocket from the same origin (:39031), so no bridge is needed.
 export default defineConfig({
   plugins: [react(), tailwindcss(), abletonWsBridge()],
+  define: {
+    __APP_VERSION__: JSON.stringify(pkg.version),
+    __BUILD_DATE__: JSON.stringify(new Date().toISOString().slice(0, 10)),
+  },
   server: {
     host: "0.0.0.0",
     port: 5173,

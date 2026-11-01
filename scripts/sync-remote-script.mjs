@@ -7,7 +7,7 @@
  *   node scripts/sync-remote-script.mjs
  *
  * Then install midi-script into Ableton's Remote Scripts folder:
- *   cp -R midi-script ~/Music/Ableton/User\ Library/Remote\ Scripts/AbletonJS
+ *   cp -R midi-script ~/Music/Ableton/User\ Library/Remote\ Scripts/DAWRemote
  */
 import { cp, rm, mkdir } from "node:fs/promises";
 import { existsSync } from "node:fs";
@@ -32,5 +32,5 @@ await cp(src, dst, { recursive: true });
 
 console.log(`✓ Copiado: web/dist → midi-script/static`);
 console.log("  Ahora instala el MIDI script en Ableton:");
-console.log("    cp -R midi-script ~/Music/Ableton/User\\ Library/Remote\\ Scripts/AbletonJS");
-console.log("  Reinicia Live y selecciona AbletonJS como Control Surface.");
+console.log("    cp -R midi-script ~/Music/Ableton/User\\ Library/Remote\\ Scripts/DAWRemote");
+console.log("  Reinicia Live y selecciona DAWRemote como Control Surface.");

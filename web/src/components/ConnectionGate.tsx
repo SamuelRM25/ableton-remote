@@ -78,7 +78,7 @@ export function ConnectionGate({ onDismiss }: Props) {
             marginBottom: 24,
           }}
         >
-          Asegúrate de que Live 12 está abierto, con <code style={{ fontFamily: "var(--font-mono)", color: "var(--color-text-1)" }}>AbletonJS</code> seleccionado como Control Surface en Preferencias → MIDI. Por defecto escucha en <code style={{ fontFamily: "var(--font-mono)", color: "var(--color-text-1)" }}>0.0.0.0:39031</code>.
+          Asegúrate de que Live 12 está abierto, con <code style={{ fontFamily: "var(--font-mono)", color: "var(--color-text-1)" }}>DAWRemote</code> seleccionado como Control Surface en Preferencias → MIDI. Por defecto escucha en <code style={{ fontFamily: "var(--font-mono)", color: "var(--color-text-1)" }}>0.0.0.0:39031</code>.
         </p>
 
         <div className="flex flex-col gap-4">

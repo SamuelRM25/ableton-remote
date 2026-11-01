@@ -107,7 +107,7 @@ export function MixerView() {
     }
   }
 
-  if (!client) return <EmptyPanel title="Live no está conectado" hint="Abre Ableton Live con AbletonJS activo como Control Surface." />;
+  if (!client) return <EmptyPanel title="Live no está conectado" hint="Abre Ableton Live con DAWRemote activo como Control Surface." />;
 
   return (
     <div className="h-full flex flex-col">

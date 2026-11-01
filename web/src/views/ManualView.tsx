@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { IconChevronDown } from "../components/icons";
+import { APP } from "../lib/app-info";
 
 interface Section {
   title: string;
@@ -12,13 +13,13 @@ const SECTIONS: Section[] = [
     body: (
       <>
         <p>
-          Es un control remoto total de <strong>Ableton Live 12</strong> desde
+          <strong>DAW Remote</strong> es un control remoto total de <strong>Ableton Live 12</strong> desde
           cualquier dispositivo en tu misma red WiFi (iPad, teléfono,
           computadora). El Mac donde corre Live hace de servidor; el resto
           son controles táctiles.
         </p>
         <p>
-          Requisitos: Live abierto, <code>AbletonJS</code> activo como Control
+          Requisitos: Live abierto, <code>DAWRemote</code> activo como Control
           Surface (Preferences → Link / Tempo / MIDI) y ambos dispositivos
           en el mismo WiFi, abriendo <code>http://IP-DEL-MAC:39031/</code>.
         </p>
@@ -218,7 +219,7 @@ const SECTIONS: Section[] = [
         <ul>
           <li>Aquí ves el estado, latencia, y cambias host/puerto/password + reconectar.</li>
           <li><strong>Clear local data</strong> borra setlist, letras y bindings del dispositivo.</li>
-          <li>Si Safari dice "servidor no responde": mismo WiFi, URL exacta <code>http://IP:39031/</code>, borra caché de Safari, Live abierto con AbletonJS activo.</li>
+          <li>Si Safari dice "servidor no responde": mismo WiFi, URL exacta <code>http://IP:39031/</code>, borra caché de Safari, Live abierto con DAWRemote activo.</li>
           <li>Si Live se cierra inesperadamente: al reabrir, <strong>acepta recuperar</strong> el trabajo no guardado. Los backups automáticos viven en <code>[TuProyecto]/Backup/*.als</code>. Guarda con ⌘S de vez en cuando: el setlist de la app se guarda por archivo, y sin archivo no hay a qué anclarlo.</li>
         </ul>
       </>
@@ -249,6 +250,25 @@ const SECTIONS: Section[] = [
           <li><strong>Session record</strong> = grabar clips nuevos en slots vacíos.</li>
           <li><strong>Back to arranger / loop del arrangement</strong> = controles del timeline, en vista Transport.</li>
         </ul>
+      </>
+    ),
+  },
+  {
+    title: "Créditos y contacto",
+    body: (
+      <>
+        <p>
+          <strong>{APP.name} v{APP.version}</strong> — desarrollado por <strong>{APP.author}</strong>,{" "}
+          <strong>{APP.company}</strong>, {APP.location}. Teléfono / WhatsApp: {APP.phone}.
+        </p>
+        <p>
+          El script de Live se basa en <strong>ableton-js</strong> de Leo Bernard (licencia MIT). La lista completa de
+          créditos está en Ajustes → Acerca de.
+        </p>
+        <p>
+          Ableton y Ableton Live son marcas de Ableton AG. DAW Remote es un producto independiente, no afiliado ni
+          respaldado por Ableton.
+        </p>
       </>
     ),
   },

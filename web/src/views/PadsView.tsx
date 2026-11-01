@@ -116,7 +116,7 @@ function FreePads({ modeSwitch }: { modeSwitch: React.ReactNode }) {
   }
 
   if (!client) {
-    return <EmptyPanel title="Live no está conectado" hint="Abre Ableton Live con AbletonJS activo como Control Surface." />;
+    return <EmptyPanel title="Live no está conectado" hint="Abre Ableton Live con DAWRemote activo como Control Surface." />;
   }
 
   const bound = bindings.filter((b) => b.trackId).length;

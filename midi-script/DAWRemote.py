@@ -3,7 +3,7 @@ import time
 import Live
 from _Framework.ControlSurface import ControlSurface
 
-from .Config import DEBUG, PLUGIN_NAME
+from .Config import APP_VERSION, DEBUG, PLUGIN_NAME
 from .Logging import logger
 from .Namespaces.Application import Application
 from .Namespaces.ApplicationView import ApplicationView
@@ -42,11 +42,11 @@ from .Socket import Socket
 from .version import version
 
 
-class AbletonJS(ControlSurface):
+class DAWRemote(ControlSurface):
     def __init__(self, c_instance):
         super().__init__(c_instance)
 
-        logger.info(f"Starting {PLUGIN_NAME} {version}...")
+        logger.info(f"Starting {PLUGIN_NAME} {APP_VERSION} (ableton-js {version})...")
 
         self.tracked_midi = set()
 

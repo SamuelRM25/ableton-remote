@@ -3,6 +3,7 @@ import { abletonStore } from "../lib/ableton-store";
 import { useSettings, useConnectionStatus, useLatency } from "../lib/hooks";
 import { DEFAULT_SETTINGS } from "../lib/settings";
 import { BackupPanel } from "../components/BackupPanel";
+import { AboutPanel } from "../components/AboutPanel";
 
 export function SettingsView() {
   const settings = useSettings();
@@ -125,23 +126,7 @@ export function SettingsView() {
           </button>
         </Section>
 
-        <Section title="About">
-          <p
-            style={{
-              fontSize: 13,
-              color: "var(--color-text-2)",
-              lineHeight: 1.55,
-              margin: 0,
-            }}
-          >
-            Ableton Remote · control total de Ableton Live 12 desde el iPad.
-            Construido sobre <code style={{ fontFamily: "var(--font-mono)" }}>ableton-js v5</code> + WebSocket nativo.
-            <br />
-            <br />
-            Para tour: instala la build dentro de la carpeta de AbletonJS Remote Script y sirve la UI desde Live.
-            Para desarrollo: corre <code style={{ fontFamily: "var(--font-mono)" }}>npm run dev</code> y usa HMR.
-          </p>
-        </Section>
+        <AboutPanel />
       </div>
     </div>
   );

@@ -15,7 +15,7 @@ const PREFIX = "ableton-remote";
 const LIVE_KEYS = ["ableton-remote.songconfig.v1", "ableton-remote:setlist"];
 
 export interface BackupFile {
-  app: "ableton-remote";
+  app: "daw-remote" | "ableton-remote";
   version: 1;
   createdAt: string;
   project: string | null;
@@ -51,7 +51,7 @@ export async function makeBackup(client: Ableton | null): Promise<BackupFile> {
       project = null;
     }
   }
-  return { app: "ableton-remote", version: 1, createdAt: new Date().toISOString(), project, local, live };
+  return { app: "daw-remote", version: 1, createdAt: new Date().toISOString(), project, local, live };
 }
 
 export function downloadBackup(b: BackupFile) {
@@ -63,7 +63,7 @@ export function downloadBackup(b: BackupFile) {
   const stamp = `${d.getFullYear()}-${two(d.getMonth() + 1)}-${two(d.getDate())}_${two(d.getHours())}${two(d.getMinutes())}`;
   const name = (b.project || "set").replace(/[^\p{L}\p{N} _-]+/gu, "").trim().replace(/\s+/g, "-") || "set";
   a.href = url;
-  a.download = `ableton-remote-${name}-${stamp}.json`;
+  a.download = `daw-remote-${name}-${stamp}.json`;
   document.body.appendChild(a);
   a.click();
   a.remove();
@@ -73,8 +73,8 @@ export function downloadBackup(b: BackupFile) {
 /** Restores a backup: browser storage + the docs inside the open Live set. */
 export async function restoreBackup(client: Ableton | null, text: string): Promise<{ local: number; live: number }> {
   const b = JSON.parse(text) as Partial<BackupFile>;
-  if (b.app !== "ableton-remote" || typeof b.local !== "object" || !b.local) {
-    throw new Error("Ese archivo no es un respaldo de Ableton Remote");
+  if ((b.app !== "daw-remote" && b.app !== "ableton-remote") || typeof b.local !== "object" || !b.local) {
+    throw new Error("Ese archivo no es un respaldo de DAW Remote");
   }
   let localCount = 0;
   for (const [k, v] of Object.entries(b.local)) {

@@ -80,7 +80,7 @@ export function TopBar({ view }: Props) {
               color: "var(--color-text-1)",
             }}
           >
-            REMOTE
+            <span style={{ color: "var(--color-accent-cue)" }}>DAW</span> REMOTE
           </span>
           <span className="flex items-center gap-1.5" style={{ marginTop: 5 }}>
             <Led on={conn.on} color={conn.color} size={6} blink={status.kind === "connecting"} />

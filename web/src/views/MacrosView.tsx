@@ -50,7 +50,7 @@ export function MacrosView({ switcher }: { switcher?: React.ReactNode } = {}) {
   const parameters = useLiveChildProp<any[]>(device, "parameters");
 
   if (!client) {
-    return <EmptyPanel title="Live no está conectado" hint="Abre Ableton Live con AbletonJS activo como Control Surface." />;
+    return <EmptyPanel title="Live no está conectado" hint="Abre Ableton Live con DAWRemote activo como Control Surface." />;
   }
 
   // Parameter 0 is always "Device On"; the macros start at index 1.

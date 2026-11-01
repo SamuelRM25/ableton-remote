@@ -5,7 +5,7 @@ _MESSAGE = "This plugin requires Live 11 or later"
 
 
 class Unsupported(ControlSurface):
-    """Stub ControlSurface shown when AbletonJS is loaded in Live 10."""
+    """Stub ControlSurface shown when DAWRemote is loaded in Live 10."""
 
     def __init__(self, c_instance):
         ControlSurface.__init__(self, c_instance)

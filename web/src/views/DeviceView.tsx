@@ -52,7 +52,7 @@ export function DeviceView({ switcher }: { switcher?: React.ReactNode } = {}) {
   const parameters = useLiveChildProp<any[]>(device, "parameters");
 
   if (!client) {
-    return <EmptyPanel title="Live no está conectado" hint="Abre Ableton Live con AbletonJS activo como Control Surface." />;
+    return <EmptyPanel title="Live no está conectado" hint="Abre Ableton Live con DAWRemote activo como Control Surface." />;
   }
   const hasDevice = !!device;
 

@@ -7,6 +7,8 @@ import { SideRail, type ViewId } from "./components/SideRail";
 import { TopBar } from "./components/TopBar";
 import { TransportBar } from "./components/TransportBar";
 import { ConnectionGate } from "./components/ConnectionGate";
+import { LicenseGate } from "./components/LicenseGate";
+import { ProductWatch } from "./lib/product-watch";
 import { TransportView } from "./views/TransportView";
 import { SessionView } from "./views/SessionView";
 import { PadsView } from "./views/PadsView";
@@ -84,6 +86,7 @@ export function App() {
     return (
       <div className="h-full w-full bg-bg text-text-1">
         <StageView standalone />
+        <LicenseGate />
         <SetlistChain client={client} />
         <Toasts />
       </div>
@@ -111,6 +114,8 @@ export function App() {
       <TransportBar />
       {isMobile && <SideRail active={view} onSelect={setView} mobile />}
       {!gateDismissed && <ConnectionGate onDismiss={() => setGateDismissed(true)} />}
+      <LicenseGate />
+      <ProductWatch />
       <SetlistChain client={client} />
       <Toasts />
     </div>

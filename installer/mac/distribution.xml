@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<installer-gui-script minSpecVersion="2">
+  <title>DAW Remote</title>
+  <organization>app.dawremote</organization>
+  <welcome file="welcome.html" mime-type="text/html"/>
+  <license file="license.txt"/>
+  <conclusion file="conclusion.html" mime-type="text/html"/>
+  <options customize="never" require-scripts="false" hostArchitectures="x86_64,arm64"/>
+  <domains enable_localSystem="true"/>
+  <choices-outline><line choice="default"/></choices-outline>
+  <choice id="default" title="DAW Remote"><pkg-ref id="app.dawremote.pkg"/></choice>
+  <pkg-ref id="app.dawremote.pkg" version="__VERSION__" onConclusion="none">DAWRemote-component.pkg</pkg-ref>
+</installer-gui-script>

@@ -1,6 +1,6 @@
 {
   "name": "web",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -15,6 +15,7 @@
     "@fontsource/dseg7-classic": "5.3.0",
     "@fontsource/jetbrains-mono": "5.3.0",
     "ableton-js": "5.0.4",
+    "qrcode-generator": "^1.4.4",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },

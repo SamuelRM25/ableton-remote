@@ -4,6 +4,7 @@ import { useSettings, useConnectionStatus, useLatency } from "../lib/hooks";
 import { DEFAULT_SETTINGS } from "../lib/settings";
 import { BackupPanel } from "../components/BackupPanel";
 import { AboutPanel } from "../components/AboutPanel";
+import { ConnectPanel, LicensePanel, UpdatePanel } from "../components/ProductPanels";
 
 export function SettingsView() {
   const settings = useSettings();
@@ -126,6 +127,9 @@ export function SettingsView() {
           </button>
         </Section>
 
+        <LicensePanel />
+        <UpdatePanel />
+        <ConnectPanel />
         <AboutPanel />
       </div>
     </div>

@@ -1,6 +1,6 @@
 {
   "name": "daw-remote",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "description": "DAW Remote — control de tu DAW en vivo desde el iPad",
   "workspaces": [
@@ -10,10 +10,17 @@
     "dev": "npm run dev --workspace=web",
     "build": "npm run build --workspace=web",
     "typecheck": "npm run typecheck --workspace=web",
-    "deploy:remote-script": "node scripts/sync-remote-script.mjs"
+    "deploy:remote-script": "node scripts/sync-remote-script.mjs",
+    "release": "node scripts/release.mjs",
+    "keys": "node scripts/keys.mjs",
+    "server": "node server/src/index.mjs",
+    "pkg:mac": "bash installer/mac/build-pkg.sh"
   },
   "engines": {
     "node": ">=20"
   },
-  "author": "Oscar Samuel Ramírez Martínez — RS Software Solutions"
+  "author": "Oscar Samuel Ramírez Martínez — RS Software Solutions",
+  "devDependencies": {
+    "fflate": "^0.8.2"
+  }
 }

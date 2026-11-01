@@ -1,0 +1,4 @@
+.secrets/
+data/
+releases/*.zip
+node_modules/

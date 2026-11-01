@@ -234,3 +234,16 @@ Ver [NOTICE.md](NOTICE.md) para todos los componentes de terceros y [CHANGELOG.m
 
 Ableton y Ableton Live son marcas de Ableton AG. DAW Remote es un producto independiente,
 no afiliado ni respaldado por Ableton.
+
+## Licencias, actualizaciones e instalador (Fase 1)
+
+| Pieza | Dónde | Para qué |
+|---|---|---|
+| Llaves de firma | `node scripts/keys.mjs` → `server/.secrets/` (privada) y `midi-script/Licensing/keys.py` (pública) | Firmar licencias y actualizaciones. **Respalda la llave privada**: si se pierde, ninguna licencia ni actualización se puede volver a verificar. |
+| Servidor | `npm run server` (`server/src/index.mjs`) | Prueba, activación, renovación, desactivación, `latest.json` y descargas. Será `api.dawremote.app`. |
+| Claves propias | `node server/tools/new-key.mjs owner tu@correo 3` | Claves `DAWR-…` para ti, testers o regalos (las de venta las da Lemon Squeezy). |
+| Versión nueva | sube la versión en `package.json`, anota en `CHANGELOG.md`, `npm run release` | Arma `build/DAWRemote`, el `.zip` firmado y `server/releases/latest.json`. |
+| Versión sin licencia | `npm run release -- --dev` | Para tu propia Mac mientras el servidor no está publicado. |
+| Instalador Mac | `npm run pkg:mac` (en la Mac) | `installer/mac/out/DAW-Remote-X.Y.Z.pkg`. Con `DEVELOPER_ID_INSTALLER` y `NOTARY_PROFILE` sale firmado y notarizado. |
+
+Para probar contra un servidor local: abre la app con `?api=http://IP:8787` una vez (queda guardado).

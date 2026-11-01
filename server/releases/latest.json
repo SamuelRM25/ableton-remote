@@ -1,0 +1,10 @@
+{
+  "version": "1.1.0",
+  "date": "2026-11-01",
+  "file": "DAWRemote-1.1.0.zip",
+  "size": 1004588,
+  "sha256": "417e21d702613fa37d8e97f3f099698487ffda79e4b49a3f196cf7ec66d524f1",
+  "signature": "575a1e5e8416ad6d9890397460c5de05f9fb0213ae10b6d7ea1f38701c95376b928b06de3281401d36b3c170b4df48ed011138295a5adcb2a2c7a7bc9bf99803",
+  "min_live": "11.0",
+  "notes": "### Licencias\n- Pantalla de activación: prueba gratis de 14 días (solo correo) o clave de licencia.\n- La licencia queda en la computadora donde corre Live, firmada digitalmente (Ed25519) y atada a esa computadora.\n- Funciona 30 días sin internet; se renueva sola cada vez que el iPad tiene conexión.\n- Una licencia que vence nunca interrumpe un show: el cambio se aplica al siguiente arranque de Live.\n- El script de Live rechaza el control sin licencia (no basta con modificar la app).\n- Ajustes → Licencia: plan, vencimiento, verificar ahora, desactivar esta computadora.\n\n### Actualizaciones\n- Ajustes → Actualizaciones: busca, descarga e instala versiones nuevas desde el iPad.\n- Cada paquete va firmado; la computadora rechaza cualquier archivo alterado.\n- Se aplican la próxima vez que abres Live y no se pueden instalar mientras está reproduciendo.\n- Aviso automático (una vez al día) cuando hay una versión nueva.\n\n### Instalación\n- Instalador para Mac (.pkg): copia DAWRemote a la User Library que use cada versión de Live y abre una guía de 4 pasos.\n- Desinstalador incluido.\n- Ajustes → Conectar otro dispositivo: código QR con la dirección de la computadora.\n- La contraseña y el puerto personalizados ahora viven en `config.json` y sobreviven a las actualizaciones.\n\n### Servidor (base de api.dawremote.app)\n- Prueba, activación, renovación y desactivación de licencias; límite de computadoras por clave.\n- Conectado a Lemon Squeezy (claves de compra) y claves propias `DAWR-…` para ti, testers y regalos.\n- Publicación de versiones (`latest.json`) y descargas."
+}

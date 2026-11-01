@@ -10,6 +10,26 @@ def create_instance(c_instance):
 
         return Unsupported(c_instance)
 
+    _apply_pending_update()
+
     from .DAWRemote import DAWRemote
 
     return DAWRemote(c_instance)
+
+
+def _apply_pending_update():
+    """Installs an update the app downloaded during the last session."""
+    try:
+        import os
+
+        from .Licensing.updater import apply_pending
+
+        applied = apply_pending(os.path.dirname(os.path.abspath(__file__)))
+        if applied:
+            import logging
+
+            logging.getLogger("DAW Remote").info("Applied update %s", applied)
+    except Exception as e:  # never keep Live from loading the script
+        import logging
+
+        logging.getLogger("DAW Remote").exception(e)

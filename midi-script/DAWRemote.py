@@ -4,6 +4,7 @@ import Live
 from _Framework.ControlSurface import ControlSurface
 
 from .Config import APP_VERSION, DEBUG, PLUGIN_NAME
+from .Licensing import license as lic
 from .Logging import logger
 from .Namespaces.Application import Application
 from .Namespaces.ApplicationView import ApplicationView
@@ -26,6 +27,7 @@ from .Namespaces.Interface import Interface
 from .Namespaces.Internal import Internal
 from .Namespaces.LooperDevice import LooperDevice
 from .Namespaces.Midi import Midi
+from .Namespaces.Product import License, System, Update
 from .Namespaces.MixerDevice import MixerDevice
 from .Namespaces.PluginDevice import PluginDevice
 from .Namespaces.RackDevice import RackDevice
@@ -42,11 +44,18 @@ from .Socket import Socket
 from .version import version
 
 
+# Reachable without a licence: activation screen, devices, updates.
+OPEN_NAMESPACES = frozenset(("internal", "license", "update", "system"))
+
+
 class DAWRemote(ControlSurface):
     def __init__(self, c_instance):
         super().__init__(c_instance)
 
         logger.info(f"Starting {PLUGIN_NAME} {APP_VERSION} (ableton-js {version})...")
+        if lic.required():
+            st = lic.status()
+            logger.info(f"License: {st['state']} (allowed={st['allowed']})")
 
         self.tracked_midi = set()
 
@@ -94,6 +103,9 @@ class DAWRemote(ControlSurface):
             "tuning-system": TuningSystem(c_instance, self.socket),
             "clip_slot": ClipSlot(c_instance, self.socket),
             "clip": Clip(c_instance, self.socket),
+            "license": License(c_instance, self.socket),
+            "update": Update(c_instance, self.socket),
+            "system": System(c_instance, self.socket),
         }
 
         self._last_tick = time.time() * 1000
@@ -180,6 +192,11 @@ class DAWRemote(ControlSurface):
                 namespace = command.get("ns")
                 if namespace not in self.handlers:
                     raise Exception(f"No handler for namespace {namespace}")
+                if namespace not in OPEN_NAMESPACES and not lic.session_allowed():
+                    results.append(
+                        {"ok": False, "error": "LICENSE_REQUIRED", "errorType": "LicenseRequired"}
+                    )
+                    continue
                 data = self.handlers[namespace].dispatch(command, connection)
                 results.append({"ok": True, "data": data})
             except Exception as e:

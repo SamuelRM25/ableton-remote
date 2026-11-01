@@ -254,6 +254,27 @@ const SECTIONS: Section[] = [
     ),
   },
   {
+    title: "Licencia y actualizaciones",
+    body: (
+      <>
+        <p>
+          La primera vez, DAW Remote pide <strong>activar</strong>: prueba gratis de 14 días con tu correo, o tu clave de
+          licencia. La licencia queda en la computadora donde corre Live; el iPad solo necesita internet para activar.
+        </p>
+        <ul>
+          <li>Funciona <strong>30 días sin internet</strong>. Cada vez que el iPad tiene conexión, se renueva sola.</li>
+          <li>Si la licencia vence durante un show, <strong>no se corta</strong>: sigue funcionando hasta que cierres Live.</li>
+          <li>Para pasar la licencia a otra computadora: Ajustes → Licencia → Desactivar esta computadora.</li>
+          <li>
+            Actualizar: Ajustes → Actualizaciones → Buscar → Instalar (con la reproducción detenida). Se aplica la
+            próxima vez que abras Live.
+          </li>
+          <li>Conectar otro iPad o teléfono: Ajustes → Conectar otro dispositivo y escanea el código QR.</li>
+        </ul>
+      </>
+    ),
+  },
+  {
     title: "Créditos y contacto",
     body: (
       <>

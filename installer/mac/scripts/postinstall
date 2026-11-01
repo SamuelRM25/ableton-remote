@@ -1,0 +1,54 @@
+#!/bin/bash
+# DAW Remote — copies the Remote Script into every Ableton User Library of the
+# person installing, then opens the welcome page. Runs as root from the .pkg.
+set -u
+SRC="/Library/Application Support/DAW Remote/DAWRemote"
+LOG="/Library/Application Support/DAW Remote/install.log"
+exec >>"$LOG" 2>&1
+echo "== $(date) postinstall"
+
+USER_NAME=$(/usr/bin/stat -f%Su /dev/console)
+if [ -z "$USER_NAME" ] || [ "$USER_NAME" = "root" ] || [ "$USER_NAME" = "loginwindow" ]; then
+  echo "No console user; nothing to copy"; exit 0
+fi
+USER_HOME=$(/usr/bin/dscl . -read "/Users/$USER_NAME" NFSHomeDirectory | /usr/bin/awk '{print $2}')
+USER_GROUP=$(/usr/bin/id -gn "$USER_NAME")
+
+# Every User Library configured in any installed Live version (Library.cfg),
+# plus the default location.
+LIBS=()
+for cfg in "$USER_HOME"/Library/Preferences/Ableton/Live\ */Library.cfg; do
+  [ -f "$cfg" ] || continue
+  path=$(/usr/bin/sed -n '/<UserLibrary>/,/<\/UserLibrary>/s/.*<ProjectPath Value="\([^"]*\)".*/\1/p' "$cfg" | head -1)
+  name=$(/usr/bin/sed -n '/<UserLibrary>/,/<\/UserLibrary>/s/.*<ProjectName Value="\([^"]*\)".*/\1/p' "$cfg" | head -1)
+  [ -n "$path" ] && LIBS+=("$path/${name:-User Library}")
+done
+LIBS+=("$USER_HOME/Music/Ableton/User Library")
+
+DONE=""
+for lib in "${LIBS[@]}"; do
+  case "$DONE" in *"|$lib|"*) continue ;; esac
+  DONE="$DONE|$lib|"
+  dest="$lib/Remote Scripts/DAWRemote"
+  echo "-> $dest"
+  /bin/mkdir -p "$lib/Remote Scripts"
+  /bin/rm -rf "$dest"
+  /bin/cp -R "$SRC" "$dest"
+  /usr/sbin/chown -R "$USER_NAME:$USER_GROUP" "$lib/Remote Scripts"
+done
+
+# The pre-release name of the script would fight DAWRemote for the port:
+# move it out of Remote Scripts (kept as a backup, not deleted).
+BACKUP="/Library/Application Support/DAW Remote/anterior"
+for lib in "${LIBS[@]}"; do
+  old="$lib/Remote Scripts/AbletonJS"
+  if [ -d "$old" ]; then
+    /bin/mkdir -p "$BACKUP"
+    /bin/rm -rf "$BACKUP/AbletonJS"
+    /bin/mv "$old" "$BACKUP/AbletonJS" && echo "moved $old -> $BACKUP"
+  fi
+done
+
+USER_ID=$(/usr/bin/id -u "$USER_NAME")
+/bin/launchctl asuser "$USER_ID" /usr/bin/sudo -u "$USER_NAME" /usr/bin/open "/Library/Application Support/DAW Remote/Bienvenida.html" || true
+exit 0

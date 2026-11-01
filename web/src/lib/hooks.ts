@@ -7,6 +7,15 @@ export function useAbleton(): Ableton | null {
   return useStore(abletonStore, (s) => s.client);
 }
 
+/** Connection to Live regardless of licence (activation & updates). */
+export function useRawAbleton(): Ableton | null {
+  return useStore(abletonStore, (s) => s.rawClient);
+}
+
+export function useLicense() {
+  return useStore(abletonStore, (s) => s.license);
+}
+
 export function useConnectionStatus() {
   return useStore(abletonStore, (s) => s.status);
 }

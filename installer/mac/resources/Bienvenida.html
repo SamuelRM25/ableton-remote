@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DAW Remote instalado</title>
+<style>
+  :root { color-scheme: dark; --bg:#121316; --panel:#1c1d21; --ink:#e9e6df; --mut:#a3a19b; --amber:#ffb23e; --green:#47d16c; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.6 -apple-system, "Helvetica Neue", sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: 48px 20px 64px; }
+  h1 { font-size: 34px; letter-spacing: .1em; margin: 0; }
+  h1 b { color: var(--amber); }
+  .ok { color: var(--green); font-weight: 600; margin: 6px 0 32px; }
+  ol { list-style: none; padding: 0; margin: 0; counter-reset: s; }
+  li { counter-increment: s; background: var(--panel); border: 1px solid #000; border-radius: 12px; padding: 18px 20px 18px 64px; margin-bottom: 14px; position: relative; box-shadow: inset 0 1px 0 rgba(255,255,255,.05); }
+  li::before { content: counter(s); position: absolute; left: 18px; top: 16px; width: 32px; height: 32px; border-radius: 50%; background: #0b0c0e; color: var(--amber); display: grid; place-items: center; font-weight: 700; box-shadow: 0 0 10px rgba(255,178,62,.25); }
+  li h2 { font-size: 17px; margin: 0 0 4px; }
+  li p { margin: 0; color: var(--mut); }
+  code, kbd { font-family: ui-monospace, Menlo, monospace; background: #0b0c0e; color: var(--ink); padding: 2px 7px; border-radius: 5px; font-size: 14px; }
+  a { color: var(--amber); }
+  footer { margin-top: 36px; color: var(--mut); font-size: 13px; }
+</style>
+</head>
+<body>
+<main>
+  <h1><b>DAW</b> REMOTE</h1>
+  <p class="ok">● Instalado correctamente</p>
+  <ol>
+    <li><h2>Abre Ableton Live</h2><p>Si ya estaba abierto, ciérralo y vuelve a abrirlo.</p></li>
+    <li><h2>Activa DAW Remote en Live</h2>
+      <p>Live → <b>Preferencias</b> (<kbd>⌘ ,</kbd>) → <b>Link, Tempo y MIDI</b>. En una fila libre de <b>Superficie de control</b> elige <code>DAWRemote</code>. Entrada y Salida quedan en <b>Ninguno</b>.</p></li>
+    <li><h2>Abre la app en esta Mac</h2>
+      <p>Entra a <a href="http://localhost:39031/">http://localhost:39031</a>. Ahí activas tu licencia o empiezas la prueba gratis de 14 días.</p></li>
+    <li><h2>Conecta el iPad o el teléfono</h2>
+      <p>En la app: <b>Ajustes → Conectar otro dispositivo</b>. Escanea el código QR con la cámara (en el mismo WiFi) y luego, en Safari, <b>Compartir → Agregar a inicio</b>.</p></li>
+  </ol>
+  <footer>
+    ¿Ayuda? WhatsApp (+502) 3902-9076 · <a href="https://dawremote.app">dawremote.app</a><br>
+    © 2026 RS Software Solutions · Huehuetenango, Guatemala. Ableton Live es marca de Ableton AG; DAW Remote es un producto independiente.
+  </footer>
+</main>
+</body>
+</html>

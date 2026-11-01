@@ -1,0 +1,14 @@
+{
+  "name": "daw-remote-api",
+  "version": "1.1.0",
+  "private": true,
+  "description": "API de licencias y actualizaciones de DAW Remote (api.dawremote.app)",
+  "type": "module",
+  "main": "src/index.mjs",
+  "scripts": {
+    "start": "node src/index.mjs",
+    "key": "node tools/new-key.mjs"
+  },
+  "engines": { "node": ">=20" },
+  "author": "Oscar Samuel Ramírez Martínez — RS Software Solutions"
+}

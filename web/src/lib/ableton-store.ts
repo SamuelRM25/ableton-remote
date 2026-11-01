@@ -7,6 +7,7 @@ import {
   type AppSettings,
   type ConnectionStatus,
 } from "./settings";
+import { getLicense, needsRefresh, refreshLicense, type LicenseStatus } from "./product";
 
 /** How often the latency readout in the top bar is refreshed. */
 const PING_INTERVAL_MS = 3_000;
@@ -23,7 +24,12 @@ const COMMAND_TIMEOUT_MS = 10_000;
 export interface AbletonStore {
   settings: AppSettings;
   status: ConnectionStatus;
+  /** Only set once the licence allows control (views use this). */
   client: Ableton | null;
+  /** The live connection even without a licence (activation screen). */
+  rawClient: Ableton | null;
+  license: LicenseStatus | null;
+  setLicense(s: LicenseStatus): void;
   latencyMs: number | null;
   setSettings(next: AppSettings): void;
   connect(): Promise<void>;
@@ -49,7 +55,14 @@ export const abletonStore = createStore<AbletonStore>((set, get) => ({
   settings: loadSettings(),
   status: { kind: "idle" },
   client: null,
+  rawClient: null,
+  license: null,
   latencyMs: null,
+
+  setLicense(license) {
+    const raw = get().rawClient;
+    set({ license, client: license.allowed && get().status.kind === "connected" ? raw : null });
+  },
 
   setSettings(next) {
     saveSettings(next);
@@ -61,7 +74,7 @@ export const abletonStore = createStore<AbletonStore>((set, get) => ({
     const { settings } = get();
     const endpoint = abletonEndpoint();
     clearStartRetry();
-    set({ status: { kind: "connecting" }, client: null, latencyMs: null });
+    set({ status: { kind: "connecting" }, client: null, rawClient: null, latencyMs: null });
     authFailure = false;
 
     const client = new Ableton({
@@ -79,8 +92,20 @@ export const abletonStore = createStore<AbletonStore>((set, get) => ({
     client.on("connect", () => {
       if (owned !== client) return;
       startRetryDelay = 1000;
-      set({ status: { kind: "connected" }, client });
       startPingLoop(client, (ms) => set({ latencyMs: ms }));
+      // Ask the script whether this computer is licensed before any view
+      // starts talking to Live.
+      void getLicense(client)
+        .catch((): LicenseStatus => ({ state: "legacy", valid: true, allowed: true, required: false, warn: false }))
+        .then((license) => {
+          if (owned !== client) return;
+          set({ status: { kind: "connected" }, rawClient: client, license, client: license.allowed ? client : null });
+          if (needsRefresh(license)) {
+            void refreshLicense(client)
+              .then((next) => next && owned === client && get().setLicense(next))
+              .catch(() => {});
+          }
+        });
     });
 
     client.on("disconnect", () => {
@@ -89,6 +114,7 @@ export const abletonStore = createStore<AbletonStore>((set, get) => ({
       set({
         status: authFailure ? { kind: "auth_failed" } : { kind: "disconnected" },
         client: null,
+        rawClient: null,
         latencyMs: null,
       });
     });
@@ -133,7 +159,7 @@ export const abletonStore = createStore<AbletonStore>((set, get) => ({
     const client = owned;
     owned = null;
     if (client) void client.close().catch(() => {});
-    set({ client: null, status: { kind: "idle" } });
+    set({ client: null, rawClient: null, status: { kind: "idle" } });
   },
 
   reconnect() {

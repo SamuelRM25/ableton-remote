@@ -1,0 +1,17 @@
+CONTRATO DE LICENCIA DE USUARIO FINAL — DAW REMOTE
+
+© 2026 RS Software Solutions (Oscar Samuel Ramírez Martínez), Huehuetenango, Guatemala.
+
+1. Licencia. Se otorga una licencia personal, no exclusiva e intransferible para usar DAW Remote en el número de computadoras que indique tu plan (prueba, mensual, anual o de por vida).
+
+2. Restricciones. No puedes revender, sublicenciar, distribuir, modificar para evadir el sistema de licencias, ni descompilar el software, salvo lo que permita la ley.
+
+3. Activación. La licencia se activa en línea y se verifica periódicamente (al menos una vez cada 30 días). Una licencia vencida nunca interrumpe una sesión de Live en curso.
+
+4. Software de terceros. DAW Remote incluye componentes de código abierto (entre ellos ableton-js, licencia MIT, © Leo Bernard). Sus licencias se incluyen en NOTICE.md y prevalecen para esos componentes.
+
+5. Marcas. Ableton y Ableton Live son marcas de Ableton AG. DAW Remote es un producto independiente, no afiliado ni respaldado por Ableton AG.
+
+6. Garantía. El software se entrega "tal cual". RS Software Solutions no será responsable por daños indirectos, pérdida de datos o interrupciones derivadas de su uso. Haz respaldos de tus proyectos.
+
+7. Reembolsos y soporte. Según la política publicada en dawremote.app. Contacto: (+502) 3902-9076.

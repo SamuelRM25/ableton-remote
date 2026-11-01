@@ -3,6 +3,33 @@
 Formato: [versionado semántico](https://semver.org/lang/es/) — MAYOR.MENOR.PARCHE.
 Cada versión nueva se anota aquí arriba, con fecha.
 
+## 1.1.0 — 2026-11-01
+
+### Licencias
+- Pantalla de activación: prueba gratis de 14 días (solo correo) o clave de licencia.
+- La licencia queda en la computadora donde corre Live, firmada digitalmente (Ed25519) y atada a esa computadora.
+- Funciona 30 días sin internet; se renueva sola cada vez que el iPad tiene conexión.
+- Una licencia que vence nunca interrumpe un show: el cambio se aplica al siguiente arranque de Live.
+- El script de Live rechaza el control sin licencia (no basta con modificar la app).
+- Ajustes → Licencia: plan, vencimiento, verificar ahora, desactivar esta computadora.
+
+### Actualizaciones
+- Ajustes → Actualizaciones: busca, descarga e instala versiones nuevas desde el iPad.
+- Cada paquete va firmado; la computadora rechaza cualquier archivo alterado.
+- Se aplican la próxima vez que abres Live y no se pueden instalar mientras está reproduciendo.
+- Aviso automático (una vez al día) cuando hay una versión nueva.
+
+### Instalación
+- Instalador para Mac (.pkg): copia DAWRemote a la User Library que use cada versión de Live y abre una guía de 4 pasos.
+- Desinstalador incluido.
+- Ajustes → Conectar otro dispositivo: código QR con la dirección de la computadora.
+- La contraseña y el puerto personalizados ahora viven en `config.json` y sobreviven a las actualizaciones.
+
+### Servidor (base de api.dawremote.app)
+- Prueba, activación, renovación y desactivación de licencias; límite de computadoras por clave.
+- Conectado a Lemon Squeezy (claves de compra) y claves propias `DAWR-…` para ti, testers y regalos.
+- Publicación de versiones (`latest.json`) y descargas.
+
 ## 1.0.0 — 2026-11-01
 
 Primera versión con nombre propio (antes "Ableton Remote").

@@ -32,10 +32,48 @@ const SEATS_DEFAULT = Number(env.SEATS_DEFAULT || 2);
 const DAY = 86400;
 const now = () => Math.floor(Date.now() / 1000);
 
-const keys = loadKeys(resolve(env.PRIVATE_KEY || join(here, ".secrets/ed25519-private.pem")), env.PRIVATE_KEY_PEM || null);
-const store = await openStore(env, resolve(env.DATA_DIR || join(here, "data")));
-if (store.kind !== "mysql") console.warn("⚠ Sin DB_HOST: usando archivo JSON (solo para desarrollo).");
-const own = ownKeys(store);
+/**
+ * Start-up problems (missing key, database refused…) don't crash the app:
+ * every request answers 503 with the reason, so it shows in the browser
+ * instead of a bare "Service Unavailable". Secrets are never included.
+ */
+let startupError = null;
+let keys = null;
+let store = null;
+let own = null;
+
+// Hostinger (LiteSpeed) loads this file with require(): no top-level await.
+// The server listens right away and finishes connecting in the background.
+const ready = (async () => {
+  try {
+    if (!env.PRIVATE_KEY_PEM && !existsSync(resolve(env.PRIVATE_KEY || join(here, ".secrets/ed25519-private.pem")))) {
+      throw new Error("Falta la variable PRIVATE_KEY_PEM (contenido de server/.secrets/ed25519-private.pem)");
+    }
+    try {
+      keys = loadKeys(resolve(env.PRIVATE_KEY || join(here, ".secrets/ed25519-private.pem")), env.PRIVATE_KEY_PEM || null);
+    } catch {
+      throw new Error("PRIVATE_KEY_PEM no es una llave válida: pega el archivo completo, con las líneas BEGIN y END");
+    }
+    if (!env.DB_HOST && !env.DATA_DIR && !env.DAWREMOTE_DEV) {
+      throw new Error("Faltan las variables de la base de datos (DB_HOST, DB_NAME, DB_USER, DB_PASSWORD)");
+    }
+    try {
+      store = await openStore(env, resolve(env.DATA_DIR || join(here, "data")));
+    } catch (e) {
+      const hint =
+        e.code === "ER_ACCESS_DENIED_ERROR" ? "usuario o contraseña incorrectos (DB_USER / DB_PASSWORD)"
+        : e.code === "ER_BAD_DB_ERROR" || e.code === "ER_DBACCESS_DENIED_ERROR" ? "la base de datos no existe o el usuario no tiene permiso sobre ella (DB_NAME / DB_USER)"
+        : ["ECONNREFUSED", "ENOTFOUND", "ETIMEDOUT", "EHOSTUNREACH"].includes(e.code) ? `no se encuentra el servidor MySQL en ${env.DB_HOST}:${env.DB_PORT || 3306} (DB_HOST / DB_PORT)`
+        : e.code || e.message;
+      throw new Error(`No se pudo conectar a MySQL: ${hint}`);
+    }
+    if (store.kind !== "mysql") console.warn("⚠ Sin DB_HOST: usando archivo JSON (solo para desarrollo).");
+    own = ownKeys(store);
+  } catch (e) {
+    startupError = e.message;
+    console.error("✗ DAW Remote API no pudo iniciar:", startupError);
+  }
+})();
 const lemon = lemonSqueezy({
   storeId: env.LEMON_STORE_ID || null,
   planMap: env.LEMON_PLAN_MAP ? JSON.parse(env.LEMON_PLAN_MAP) : {},
@@ -241,6 +279,23 @@ export const server = createServer(async (req, res) => {
   const ip = req.headers["x-forwarded-for"]?.split(",")[0].trim() || req.socket.remoteAddress || "?";
   try {
     if (req.method === "OPTIONS") return send(res, 204);
+    await ready;
+    if (startupError) {
+      return send(res, 503, {
+        ok: false,
+        service: "DAW Remote API",
+        error: startupError,
+        config: {
+          PRIVATE_KEY_PEM: !!env.PRIVATE_KEY_PEM,
+          DB_HOST: env.DB_HOST || null,
+          DB_PORT: env.DB_PORT || null,
+          DB_NAME: env.DB_NAME || null,
+          DB_USER: env.DB_USER || null,
+          DB_PASSWORD: !!env.DB_PASSWORD,
+          PUBLIC_URL: env.PUBLIC_URL || null,
+        },
+      });
+    }
     if (req.method === "GET" && (url.pathname === "/" || url.pathname === "/health")) {
       return send(res, 200, { ok: true, service: "DAW Remote API", store: store.kind, time: now() });
     }
@@ -266,5 +321,5 @@ export const server = createServer(async (req, res) => {
 // Hostinger starts the entry file through its own launcher, so always listen
 // (tests import this module with NO_LISTEN=1).
 if (!env.NO_LISTEN) {
-  server.listen(PORT, () => console.log(`DAW Remote API en ${PUBLIC_URL} (puerto ${PORT}, datos: ${store.kind})`));
+  server.listen(PORT, () => console.log(`DAW Remote API en ${PUBLIC_URL} (puerto ${PORT}, datos: ${store?.kind ?? "sin iniciar"})`));
 }

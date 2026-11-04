@@ -6,6 +6,7 @@
   "type": "module",
   "main": "src/index.mjs",
   "scripts": {
+    "build": "echo \"El servidor no necesita compilación\"",
     "start": "node src/index.mjs",
     "key": "node tools/new-key.mjs"
   },
@@ -14,6 +15,6 @@
   },
   "author": "Oscar Samuel Ramírez Martínez — RS Software Solutions",
   "dependencies": {
-    "mysql2": "^3.11.5"
+    "mysql2": "^3.24.6"
   }
 }

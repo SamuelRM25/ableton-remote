@@ -258,7 +258,7 @@ const SECTIONS: Section[] = [
     body: (
       <>
         <p>
-          La primera vez, DAW Remote pide <strong>activar</strong>: prueba gratis de 14 días con tu correo, o tu clave de
+          La primera vez, DAW Remote pide <strong>activar</strong>: prueba gratis de 30 días con tu correo, o tu clave de
           licencia. La licencia queda en la computadora donde corre Live; el iPad solo necesita internet para activar.
         </p>
         <ul>

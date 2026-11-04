@@ -6,8 +6,10 @@ const DAY = 86400;
 
 const b64u = (buf) => Buffer.from(buf).toString("base64url");
 
-export function loadKeys(privatePath) {
-  const privateKey = createPrivateKey(readFileSync(privatePath));
+/** From PRIVATE_KEY_PEM (Hostinger env var; literal "\\n" allowed) or a file. */
+export function loadKeys(privatePath, pem = null) {
+  const source = pem ? pem.replace(/\\n/g, "\n") : readFileSync(privatePath);
+  const privateKey = createPrivateKey(source);
   return { privateKey, publicKey: createPublicKey(privateKey) };
 }
 

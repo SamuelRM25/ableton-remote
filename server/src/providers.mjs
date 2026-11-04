@@ -1,6 +1,3 @@
-import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
-
 /**
  * A provider checks licence keys with whoever sold them.
  *   activate(key, machine) → { plan, email, until, instanceId, seats }
@@ -76,25 +73,22 @@ export function lemonSqueezy({ planMap = {}, storeId = null, fetchImpl = fetch }
 }
 
 /**
- * Development / owner keys from data/dev-keys.json:
- *   { "DAWR-OWNER-XXXX": { "plan": "owner", "email": "…", "seats": 3, "until": null } }
+ * Keys made by this server (`DAWR-…`): for you, testers, gifts or partners.
+ * Created with tools/new-key.mjs and stored in the database.
  */
-export function devKeys(dataDir) {
-  const load = () => {
-    const f = join(dataDir, "dev-keys.json");
-    return existsSync(f) ? JSON.parse(readFileSync(f, "utf8")) : {};
-  };
+export function ownKeys(store) {
+  const shape = (k) => ({ plan: k.plan || "lifetime", email: k.email || null, until: k.until ?? null, seats: k.seats ?? 2 });
   return {
-    name: "dev",
+    name: "own",
     async activate(key) {
-      const k = load()[key];
-      if (!k) throw new LicenseProblem("Esa clave no existe.", 403);
-      return { plan: k.plan || "lifetime", email: k.email || null, until: k.until ?? null, seats: k.seats ?? 2, instanceId: `dev-${Date.now()}` };
+      const k = await store.getDevKey(key);
+      if (!k || k.revoked) throw new LicenseProblem("Esa clave no existe o fue desactivada.", 403);
+      return { ...shape(k), instanceId: `own-${Date.now()}` };
     },
     async validate(key) {
-      const k = load()[key];
+      const k = await store.getDevKey(key);
       if (!k || k.revoked) return { revoked: true, reason: "Licencia desactivada" };
-      return { plan: k.plan || "lifetime", email: k.email || null, until: k.until ?? null, seats: k.seats ?? 2 };
+      return shape(k);
     },
     async deactivate() {},
   };

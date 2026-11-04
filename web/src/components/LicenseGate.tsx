@@ -69,7 +69,7 @@ export function LicenseGate() {
 
         <div className="flex gap-2" style={{ marginTop: 20 }}>
           {!trialUsed && (
-            <LedKey size="md" color="play" active={mode === "trial"} label="Probar 14 días gratis" onClick={() => setMode("trial")} />
+            <LedKey size="md" color="play" active={mode === "trial"} label="Probar 30 días gratis" onClick={() => setMode("trial")} />
           )}
           <LedKey size="md" color="cue" active={mode === "key"} label="Tengo una clave" onClick={() => setMode("key")} />
         </div>
@@ -109,7 +109,7 @@ export function LicenseGate() {
                 autoCapitalize="off"
                 autoCorrect="off"
               />
-              <span style={{ fontSize: 12, color: "var(--color-text-3)" }}>Todas las funciones durante 14 días. Sin tarjeta.</span>
+              <span style={{ fontSize: 12, color: "var(--color-text-3)" }}>Todas las funciones durante 30 días. Sin tarjeta.</span>
             </>
           )}
 

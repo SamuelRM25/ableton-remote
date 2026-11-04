@@ -9,6 +9,11 @@
     "start": "node src/index.mjs",
     "key": "node tools/new-key.mjs"
   },
-  "engines": { "node": ">=20" },
-  "author": "Oscar Samuel Ramírez Martínez — RS Software Solutions"
+  "engines": {
+    "node": ">=20"
+  },
+  "author": "Oscar Samuel Ramírez Martínez — RS Software Solutions",
+  "dependencies": {
+    "mysql2": "^3.11.5"
+  }
 }

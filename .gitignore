@@ -10,6 +10,5 @@ setlists/*.local.json
 build/
 server/.secrets/
 server/data/
-server/releases/*.zip
 server/releases/*.pkg
 *.pkg

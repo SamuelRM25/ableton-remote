@@ -6,9 +6,21 @@ const DAY = 86400;
 
 const b64u = (buf) => Buffer.from(buf).toString("base64url");
 
-/** From PRIVATE_KEY_PEM (Hostinger env var; literal "\\n" allowed) or a file. */
+/**
+ * Rebuilds a PEM from whatever an env-var field left of it: lines joined with
+ * spaces or nothing, literal "\\n", surrounding quotes, or just the base64 body.
+ */
+export function normalizePem(value) {
+  let v = String(value).trim().replace(/^["']|["']$/g, "").replace(/\\n/g, "\n");
+  const m = v.match(/-----BEGIN ([A-Z ]+)-----([\s\S]*?)-----END \1-----/);
+  const label = m ? m[1] : "PRIVATE KEY";
+  const body = (m ? m[2] : v).replace(/[^A-Za-z0-9+/=]/g, "");
+  return `-----BEGIN ${label}-----\n${body.match(/.{1,64}/g).join("\n")}\n-----END ${label}-----\n`;
+}
+
+/** From PRIVATE_KEY_PEM (Hostinger env var) or a file. */
 export function loadKeys(privatePath, pem = null) {
-  const source = pem ? pem.replace(/\\n/g, "\n") : readFileSync(privatePath);
+  const source = pem ? normalizePem(pem) : readFileSync(privatePath);
   const privateKey = createPrivateKey(source);
   return { privateKey, publicKey: createPublicKey(privateKey) };
 }

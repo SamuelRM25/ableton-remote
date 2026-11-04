@@ -1,4 +1,5 @@
 import { APP, CREDITS } from "../lib/app-info";
+import { LogoMark } from "./Logo";
 
 const muted = { color: "var(--color-text-2)", fontSize: 13, lineHeight: 1.55, margin: 0 } as const;
 const link = { color: "var(--color-accent-link)", textDecoration: "none" } as const;
@@ -11,9 +12,10 @@ export function AboutPanel() {
         Acerca de
       </h3>
 
-      <div className="flex items-baseline gap-3 flex-wrap">
+      <div className="flex items-center gap-3 flex-wrap">
+        <LogoMark size={40} />
         <span style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 24, letterSpacing: "0.08em" }}>
-          DAW REMOTE
+          <span style={{ color: "var(--color-accent-cue)" }}>DAW</span> REMOTE
         </span>
         <span className="value-mono" style={{ fontSize: 12, color: "var(--color-text-3)" }}>
           v{APP.version} · {APP.buildDate}

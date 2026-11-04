@@ -3,6 +3,7 @@ import { abletonStore } from "../lib/ableton-store";
 import { useAbleton, useConnectionStatus, useLiveProp, useLatency } from "../lib/hooks";
 import { useSongClock } from "../lib/clock";
 import { Led, Meter } from "./hw";
+import { LogoMark } from "./Logo";
 
 interface Props {
   view: string;
@@ -70,6 +71,7 @@ export function TopBar({ view }: Props) {
     >
       {/* Brand + connection */}
       <div className="flex items-center gap-2.5 shrink-0">
+        <LogoMark size={34} />
         <div className="flex flex-col" style={{ lineHeight: 1 }}>
           <span
             style={{

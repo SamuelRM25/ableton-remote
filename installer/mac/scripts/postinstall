@@ -49,6 +49,16 @@ for lib in "${LIBS[@]}"; do
   fi
 done
 
+# Welcome page: the online one (always up to date), in the user's language;
+# the copy inside the installer when there is no internet.
 USER_ID=$(/usr/bin/id -u "$USER_NAME")
-/bin/launchctl asuser "$USER_ID" /usr/bin/sudo -u "$USER_NAME" /usr/bin/open "/Library/Application Support/DAW Remote/Bienvenida.html" || true
+LANG_PREF=$(/usr/bin/sudo -u "$USER_NAME" /usr/bin/defaults read -g AppleLanguages 2>/dev/null | /usr/bin/sed -n '2p' | /usr/bin/tr -d ' ",')
+case "$LANG_PREF" in
+  es*) WELCOME="https://dawremote.app/bienvenida/" ;;
+  *)   WELCOME="https://dawremote.app/en/welcome/" ;;
+esac
+if ! /usr/bin/curl -fsI --max-time 4 "$WELCOME" >/dev/null 2>&1; then
+  WELCOME="/Library/Application Support/DAW Remote/Bienvenida.html"
+fi
+/bin/launchctl asuser "$USER_ID" /usr/bin/sudo -u "$USER_NAME" /usr/bin/open "$WELCOME" || true
 exit 0

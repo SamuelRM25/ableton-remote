@@ -4,6 +4,7 @@ import { useConnectionStatus, useLicense, useRawAbleton } from "../lib/hooks";
 import { BUY_URL, activateKey, startTrial, stateText } from "../lib/product";
 import { APP } from "../lib/app-info";
 import { LedKey } from "./hw";
+import { LogoMark } from "./Logo";
 
 const input: React.CSSProperties = {
   width: "100%",
@@ -59,8 +60,11 @@ export function LicenseGate() {
       style={{ background: "color-mix(in srgb, var(--color-bg) 92%, transparent)", backdropFilter: "blur(10px)", zIndex: 110, padding: 16 }}
     >
       <div className="panel-raised" style={{ width: "min(480px, 100%)", padding: 26 }}>
-        <div style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 26, letterSpacing: "0.12em" }}>
-          <span style={{ color: "var(--color-accent-cue)" }}>DAW</span> REMOTE
+        <div className="flex items-center gap-3" style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 26, letterSpacing: "0.12em" }}>
+          <LogoMark size={44} />
+          <span>
+            <span style={{ color: "var(--color-accent-cue)" }}>DAW</span> REMOTE
+          </span>
         </div>
         <p style={{ margin: "6px 0 0", color: "var(--color-text-2)", fontSize: 14 }}>
           {license.state === "none" ? "Activa DAW Remote en esta computadora para empezar." : stateText(license)}

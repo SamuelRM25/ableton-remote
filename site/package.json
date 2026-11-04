@@ -1,0 +1,11 @@
+{
+  "name": "daw-remote-site",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Sitio de ventas de DAW Remote (dawremote.app) — HTML estático",
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs"
+  },
+  "author": "Oscar Samuel Ramírez Martínez — RS Software Solutions"
+}

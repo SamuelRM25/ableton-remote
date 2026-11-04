@@ -3,10 +3,17 @@
 Formato: [versionado semántico](https://semver.org/lang/es/) — MAYOR.MENOR.PARCHE.
 Cada versión nueva se anota aquí arriba, con fecha.
 
+## Sin publicar
+
+- Logo nuevo (botón con aro LED y play) en la app, el ícono de inicio del iPad y la pestaña del navegador.
+- Sitio de ventas dawremote.app en español e inglés, con términos, privacidad, reembolsos y bienvenida.
+- El instalador abre la bienvenida en dawremote.app (copia local si no hay internet).
+- Servidor de licencias en api.dawremote.app con MySQL y avisos de Lemon Squeezy.
+
 ## 1.1.0 — 2026-11-01
 
 ### Licencias
-- Pantalla de activación: prueba gratis de 14 días (solo correo) o clave de licencia.
+- Pantalla de activación: prueba gratis de 30 días (solo correo) o clave de licencia.
 - La licencia queda en la computadora donde corre Live, firmada digitalmente (Ed25519) y atada a esa computadora.
 - Funciona 30 días sin internet; se renueva sola cada vez que el iPad tiene conexión.
 - Una licencia que vence nunca interrumpe un show: el cambio se aplica al siguiente arranque de Live.
